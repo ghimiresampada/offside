@@ -1,0 +1,10 @@
+\chapter*{ABSTRACT}
+\phantomsection
+\addcontentsline{toc}{chapter}{ABSTRACT}
+The field of monitoring and surveillance requires the use of high resolution image sensors  but the computational power required to process such data is very high and becomes a significant challenge for edge device processing.  In order to process the high resolution image in an edge device requires an aggressive spatial downsampling which destroys the fine details necessary for reliable detection of small and distant subjects. This work presents a distributed inference architecture for real-time Human Presence Detection (HPD) on microcontroller based systems.  Rather than downsampling the full frame, the pipeline partitions each captured image into a grid of smaller tiles, allowing each tile to be inferred independently at full local resolution. The resulting tile-level predictions are passed to a lightweight aggregator, which combines outputs across all tiles to produce a single classification score.
+End-to-end benchmarking reveals that frame capturing and tiling completes in 4 ms, aggregator classification in 0.342 ms, and takes 472 ms for feature transmission per tile. The dominant bottleneck is tile level inference on the ESP32-S3, which requires 2,657 ms per tile. The total critical-path latency comes to 18.9 seconds approximately against the 1,000 ms target. The results confirm architectural correctness across all pipeline stages while clearly identifying memory bound inference latency and sequential tile fragmentation as the primary targets for optimisation in future work.
+
+
+\vspace{1em}
+
+\textbf{Keywords:}\textit{ Human presence detection, distributed tile-based inference, local binary convolutional neural network, attention mechanism, TinyML, post-training quantization, ESP32, edge computing.}

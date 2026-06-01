@@ -1,0 +1,454 @@
+\chapter{RESULTS AND ANALYSIS}
+The following report details the training and evaluation of a \gls{lbc} architecture for \gls{hpd}. The model was trained over 45 epochs using a \textit{OneCycleLR} scheduler before early stopping was triggered.
+
+\section{MobileNetV2 Architecture Performance}
+The utilization of a MobileNetV2 architecture for the task of \gls{hpd} demonstrated
+significantly higher accuracy compared to the lightweight \gls{lbcnn} baseline, at the cost of
+increased model complexity. The model was trained for 12 epochs before early stopping was
+triggered, using a \textit{OneCycleLR} scheduler with a maximum learning rate of $0.01$.
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{src/images/train.png}
+        \caption{Training and validation loss over 45 epochs.}
+        \label{fig:mobilenet_loss}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{src/images/normal.png}
+        \caption{Normalised confusion matrix on the test set.}
+        \label{fig:mobilenet_confusion}
+    \end{subfigure}
+    \caption{MobileNetV2 training dynamics and test-set evaluation results.}
+    \label{fig:mobilenet_results}
+    \end{figure}
+The model was trained on a significantly larger dataset of 20,736 samples (split into 85\%
+training, 5\% validation, and 10\% test) compared to the \gls{lbcnn} baseline. As shown in
+\cref{fig:mobilenet_loss,fig:mobilenet_confusion}, both training and validation loss
+decrease consistently across epochs with strong convergence, indicating that the larger dataset
+effectively mitigated the overfitting observed in the \gls{lbcnn} model. The best validation
+accuracy of \textbf{87.34\%} was recorded at epoch 7, and early stopping was triggered at epoch
+12 with a patience of 5.
+
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{MobileNetV2 Training Run Summary}
+\label{tab:mobilenet_summary}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric}              & \textbf{Value}  & \textbf{Epoch} \\
+\midrule
+Best validation accuracy     & 87.34\%         & 7              \\
+Best validation loss         & 0.3145          & 6              \\
+Final training accuracy      & 89.32\%         & 12             \\
+Test accuracy                & 86.18\%         & ---            \\
+Test \gls{auc} (ROC)         & 0.931           & ---            \\
+Early stopping               & ---             & 12             \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{MobileNetV2 Test-Set Evaluation}
+Following training, the best-checkpoint model was evaluated on a held-out test set of 2,432
+images. \Cref{tab:mobilenet_classification_report} presents the per-class precision, recall, and
+F1-score.
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Per-Class Classification Report on the Test Set ($n = 2432$) for MobileNetV2}
+\label{tab:mobilenet_classification_report}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class}       & \textbf{Precision} & \textbf{Recall}
+                      & \textbf{F1-score}  & \textbf{Support} \\
+\midrule
+Class~0 (No human)   & 0.7958 & 0.8955 & 0.8427 & 1005 \\
+Class~1 (Human)      & 0.9193 & 0.8381 & 0.8768 & 1427 \\
+\midrule
+Macro average        & 0.8575 & 0.8668 & 0.8598 & 2432 \\
+Weighted average     & 0.8682 & 0.8618 & 0.8627 & 2432 \\
+\midrule
+\multicolumn{4}{l}{\textbf{Overall test accuracy}} & \textbf{86.18\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{LBCNN Architecture Performance}
+The utilization of \gls{lbc} architecture for the task of human presence detection demonstrated the feasibility of a lightweight model with reliable accuracy on resource constrained \glspl{mcu}.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{src/images/1.png}
+        \caption{Training and validation loss over 45 epochs.}
+        \label{fig:lbcnn_loss}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{src/images/2.png}
+        \caption{Normalised confusion matrix on the test set.}
+        \label{fig:lbcnn_confusion}
+    \end{subfigure}
+    \caption{LBCNN training dynamics and test-set evaluation results.}
+    \label{fig:lbcnn_results}
+    \end{figure}
+As illustrated in \cref{fig:lbcnn_loss,fig:lbcnn_confusion}, the \gls{lbcnn} model
+shows consistent reduction in training loss over 45 epochs, decreasing steadily from
+0.70 to approximately 0.51, while the validation loss remains highly volatile throughout
+training with sharp spikes reaching as high as 1.10, a behaviour attributed to the
+limited dataset size of 737 training samples where individual batches exert
+disproportionate influence on the validation metric. The normalised confusion matrix indicates broadly balanced per class recall of 0.72 for Class 0 and 0.71 for Class 1, indicating that the weighted sampling strategy was successful in avoiding majority class collapse. The 28\% false alarm rate and 29\% missed detection rate suggest that the binary convolutional features lack sufficient discriminative precision to separate the two classes cleanly. It is a direct consequence of the constrained model capacity and limited training data.
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Training Run Summary}
+\label{tab:summary}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric}             & \textbf{Value} & \textbf{Epoch} \\
+\midrule
+Best validation loss        & 0.5721         & 30             \\
+Best validation accuracy    & 77.17\%        & 43             \\
+Final training accuracy     & 78.56\%        & 45             \\
+Test accuracy               & 71.74\%        & ---            \\
+Test \gls{auc} (roc)  & 0.777          & ---            \\
+Early stopping              & ---            & 45             \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Test-Set Evaluation}
+Following training, the best-checkpoint model was evaluated on a held-out test set of 92 images. Table~\ref{tab:classification_report} presents the per-class precision, recall, and F1-score.
+
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Per-Class Classification Report on the Test Set ($n = 92$)}
+\label{tab:classification_report}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class}       & \textbf{Precision} & \textbf{Recall}
+                      & \textbf{F1-score}  & \textbf{Support} \\
+\midrule
+Class~0 (No human)   & 0.6190 & 0.7222 & 0.6667 & 36 \\
+Class~1 (Human)      & 0.8000 & 0.7143 & 0.7547 & 56 \\
+\midrule
+Macro average        & 0.7095 & 0.7183 & 0.7107 & 92 \\
+Weighted average     & 0.7292 & 0.7174 & 0.7203 & 92 \\
+\midrule
+\multicolumn{4}{l}{\textbf{Overall test accuracy}} & \textbf{71.74\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.75\columnwidth]{src/images/2.png}
+%   \caption{Normalised confusion matrix on the test set.}
+%   \label{fig:confusion}
+% \end{figure}
+
+% The model achieves a test accuracy of \textbf{71.74\%} and an \gls{auc} of \textbf{0.777}. As shown in Fig.~\ref{fig:confusion} and Table~\ref{tab:classification_report}, the per-class recall is balanced ($0.72$ and $0.71$), confirming that weighted sampling prevented a majority-class collapse. Notably, Class 1 precision ($0.80$) exceeds Class 0 precision ($0.62$), indicating the model favors human detection—a desirable property for surveillance applications where missed detections are more critical than false alarms.
+
+% ============================================================
+\section{Comparative Analysis: LBCNN vs.\ MobileNetV2}
+% ============================================================
+\Cref{tab:model_comparison} summarises the key performance and resource metrics for both architectures studied in this work. The \gls{lbcnn} model is intended for direct deployment on resource-constrained \glspl{mcu} while MobileNetV2 is a higher capacity reference baseline trained on a larger dataset.
+
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Performance Comparison: LBCNN vs.\ MobileNetV2}
+\label{tab:model_comparison}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric}                  & \textbf{LBCNN}      & \textbf{MobileNetV2}  \\
+\midrule
+Best validation accuracy         & 77.17\%             & 87.34\%               \\
+Best validation loss             & 0.5721              & 0.3145                \\
+Final training accuracy          & 78.56\%             & 89.32\%               \\
+\midrule
+Test accuracy                    & 71.74\%             & 86.18\%               \\
+Test \gls{auc} (ROC)             & 0.777               & 0.931                 \\
+\midrule
+Class~0 Precision                & 0.619               & 0.796                \\
+Class~0 Recall                   & 0.722               & 0.896                \\
+Class~0 F1-score                 & 0.667               & 0.843                \\
+\midrule
+Class~1 Precision                & 0.8000              & 0.9193                \\
+Class~1 Recall                   & 0.7143              & 0.8381                \\
+Class~1 F1-score                 & 0.7547              & 0.8768                \\
+\midrule
+Number of parameters             & 19,779              & 2,225,858              \\
+Model size (FP32)                & 80 KB               & 8490 KB                \\
+\gls{int8} Model size            & 20 KB               & 2122 KB                \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Overall Comparative Analysis}
+
+The experimental results summarised in \cref{tab:model_comparison} show that the MobileNetV2 outperforms the LBCNN in all the evaluation metrics with a clear edge in performance. The MobileNetV2 achieved $86.18\%$ test accuracy and $0.931\%$ gls{auc}, while the LBCNN achieved $71.74\%$ and $0.777\%$, respectively, which represents an improvement of $14.44\%$ percentage points and $0.154\%$. This gap is present for all the per-class metrics, with MobileNetV2 being better than gls{lbcnn} in terms of both precision and recall for both classes.
+
+The difference in training behaviour is equally clear. The gls{lbcnn} loss and accuracy curves are very volatile for all the 45 epochs with the validation accuracy jumping sharply between successive epochs. The instability is a direct result of the very small training set (737 samples) where individual batches have an outsized impact on the gradient signal. The MobileNetV2 model trained on 18,432 samples with ImageNet pretrained weights converges smoothly in 12 epochs, with the loss and accuracy curves declining and increasing monotonically, respectively. The pretrained initialisation removes the need to learn low level features from scratch, and the larger dataset provides stable gradients together explaining why MobileNetV2 converges faster, more cleanly and to a significantly better optimum..
+
+This picture is supported by the roc and precision–recall curves. The roc curve of MobileNetV2 goes up sharply towards the top left corner, suggesting high true positive rates for low false positive rates and demonstrating that the class probability scores are well separated. The \gls{lbcnn} ROC curve is more gradual, reflecting that its 64-dimensional binary feature representations achieve less class separability. Similarly, MobileNetV2 achieves higher precision over a wider range of recall thresholds. \gls{lbcnn} precision drops more quickly with increasing recall, in line with a model working close to the limits of its representational capacity.
+
+However, this comparison should be understood in the context of the fundamentally different constraints under which each model operates. MobileNetV2 has 2,225,858 parameters and takes up 8.49~MB in FP32, which is way beyond the memory budget of any commodity \gls{mcu}. The \gls{lbcnn}, which has only 19,779 parameters and a deployed size of just 0.02 MB after INT8 quantization, easily fits within the ESP32-S3’s 512~KB \gls{sram}. The 14.44 percentage point accuracy trade-off is thus not a shortcoming but an intentional result of designing for deployment on hardware that is about \textbf{425$\times$ more memory-constrained} than what MobileNetV2 requires. For real-time, battery-powered, GPU-free edge inference, \gls{lbcnn} offers a principled and practical solution to the accuracy-efficiency trade-off of \gls{tinyml} deployments.
+
+\section{System Overview and Evaluation Methodology}
+ 
+We evaluate this distributed inference pipeline for four different processing stages: frame capture and tiling at the \gls{esp}-CAM, tile transmission from the \gls{esp}-CAM to the two ESP32-S3 worker nodes, tile-level feature extraction and attention scoring at each worker node, weighted feature transmission from the worker nodes to the ESP32 aggregator, and final classification at the aggregator. Each stage was independently benchmarked against dedicated test sketches with synthetic inputs to isolate stage specific latency from end-to-end confounding factors. All the timing measurements were done using the ESP32 hardware \textit{micros()} counter, with the CPU clock set to 240MHz. \Cref{tab:pipeline_latency} presents the complete latency breakdown across
+all pipeline stages.
+ 
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{End-to-End Pipeline Latency Breakdown}
+\label{tab:pipeline_latency}
+\centering
+\small
+\begin{tabular}{p{4.5cm}p{2.5cm}p{3cm}r}
+\toprule
+\textbf{Stage} & \textbf{Node} & \textbf{Detail} & \textbf{Latency} \\
+\midrule
+Frame capture + tiling
+    & ESP-CAM        & 224$\times$224 $\rightarrow$ 9 tiles  & 4~ms            \\
+Tile transmission (CAM $\rightarrow$ Workers)
+    & Worker 1       & 5 tiles $\times$ 38 fragments         & 3,243~ms        \\
+Tile transmission (CAM $\rightarrow$ Workers)
+    & Worker 2       & 4 tiles $\times$ 38 fragments         & 1,183~ms        \\
+Tile inference (extractor + attention)
+    & Worker 1       & 5 tiles sequential                    & 13,284~ms       \\
+Tile inference (extractor + attention)
+    & Worker 2       & 4 tiles sequential                    & 10,627~ms       \\
+Feature transmission (Workers $\rightarrow$ Aggregator)
+    & Per tile avg   & 69-byte payload                       & 472~ms          \\
+Aggregator (softmax + sum + classifier)
+    & ESP32          & 9 tiles aggregated                    & 0.342~ms        \\
+\midrule
+Total pipeline (critical path)
+    & \multicolumn{2}{l}{Worker 1 bottleneck}               & $\sim$16,999~ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+ 
+\subsection{ESP-CAM: Frame Capture and Tiling}
+ 
+The \gls{esp}-CAM node captures a 224$\times$224 gray-scale frame and splits it into nine overlapping 96$\times$96 tiles with a step size of 72 pixels (25\% overlap) along both spatial axes. The whole capture-to-tile pipeline takes 4~ms, rendering this stage completely insignificant compared to all downstream processing. This confirms the fact that the tiling strategy itself incurs no meaningful overhead, and that the \gls{esp}-CAM is able to achieve the target 1~\gls{fps} frame rate from a capture perspective alone.
+ 
+The 4~ms figure encompasses camera sensor readout, RGB565-to-grayscale conversion, and
+the nine sequential tile extraction operations. At this rate, the \gls{esp}-CAM could
+theoretically support up to 250~\gls{fps} in isolation, meaning the capture stage will
+never be the bottleneck regardless of how the downstream pipeline is optimised.
+ 
+\subsection{Tile Transmission: ESP-CAM to Worker Nodes}
+ 
+The first latency stage in the pipeline is the transmission of tiles from the \gls{esp}-CAM to the two worker nodes via \gls{esp}-NOW. Each tile is 96$\times$96, and is 9,216 bytes in size. \gls{esp}-NOW has a maximum frame size of 250 bytes, so each tile is fragmented into 38 sequential packets of 247 data bytes each, with a synchronous ACK-wait between fragments for flow control.
+ 
+Worker~1 was assigned tiles 0–-4 (five tiles) and took 3,243~ms to transmit. Worker~2 was assigned tiles 5–-8 (four tiles) and took 1,183~ms. The difference between these two numbers 3,243~ms vs. 1,183~ms for one more tile is disproportionate and deserves analysis
+ 
+The main reason for this is channel contention. Both workers are on the same 2.4~GHz \gls{esp}-NOW channel and the \gls{esp}-CAM first transmits to Worker~1 then switches to Worker~2. Worker~1 then takes the full serialised cost of $5\times38 = 190$ fragments with ACK-wait on each, but Worker~2 gets a cleaner channel once Worker 1's transmission is over. Worker~1 has a about 648 ms per tile transmission cost (3,243~/~5). Worker~2 has a about 296~ms per tile transmission cost (1,183~/~4). The reason for this 2.2$\times$ difference is the compounding effect of the sequential ACK-wait under a loaded channel, and not an inherent difference in channel quality between the two nodes.
+ 
+Both of these figures are well over the 1,000~ms frame budget target. The transmission stage alone is $4.4\times$ over budget, as the ESP-CAM takes about 4,426 ms (3,243~+~1,183) total time to finish sending all nine tiles. This indicates that the most promising area of optimisation after inference latency is tile fragmentation and sequential ACK-based flow control.
+ 
+\subsection{Worker Node Inference: Tile Extractor and Attention}
+ 
+Each ESP32-S3 worker node runs two TFLite Micro models sequentially per tile: the tile
+extractor (60~\gls{kb} INT8, producing a 64-dimensional feature vector) and the
+attention head (6~\gls{kb} INT8, producing a scalar logit). Both models execute from a
+600~\gls{kb} arena allocated in Octal PSRAM via
+\textit{heap\_caps\_aligned\_alloc} with 16-byte alignment.
+ 
+Worker~1 processed five tiles sequentially, completing in 13,284~ms total, yielding an
+average per tile inference time of 2,657~ms. Worker~2 processed four tiles sequentially,
+completing in 10,627~ms total, yielding an average per tile inference time of 2,657~ms
+consistent with Worker~1, confirming that per tile inference time is stable and
+node-independent.
+ 
+The dominant contributor to this latency is PSRAM access speed. The tile extractor
+requires a minimum arena of 451~\gls{kb}, which exceeds the ESP32-S3's available
+internal \gls{sram} ($\sim$180~\gls{kb} free after system allocation). All intermediate
+activation tensors therefore reside in Octal PSRAM, which operates at
+significantly higher latency than internal \gls{sram} due to the SPI bus overhead
+and cache miss penalty. Internal \gls{sram} access on the ESP32-S3 operates at
+CPU speed ($\sim$4~ns at 240~MHz), whereas Octal PSRAM access incurs
+approximately 20 to 40 clock cycles of latency per access, producing the observed
+$\sim$2.66~s per-tile execution time compared to the sub 100~ms that would be expected
+for an equivalent model running entirely from \gls{sram}.
+\Cref{tab:worker_inference} presents the per tile inference breakdown.
+ 
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Worker Node Per-Tile Inference Latency}
+\label{tab:worker_inference}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric}               & \textbf{Worker 1 (5 tiles)} & \textbf{Worker 2 (4 tiles)} \\
+\midrule
+Total inference time          & 13,284~ms                   & 10,627~ms                   \\
+Avg per-tile inference        & 2,657~ms                    & 2,657~ms                    \\
+Tile extractor arena used     & 441~KB (PSRAM)              & 441~KB (PSRAM)              \\
+Attention arena used          & $<$1~KB (SRAM)              & $<$1~KB (SRAM)              \\
+Model size (extractor)        & 60~KB                       & 60~KB                       \\
+Model size (attention)        & 6~KB                        & 6~KB                        \\
+Quantisation                  & INT8 (fully quantised)      & INT8 (fully quantised)      \\
+Float32 tensors remaining     & 0                           & 0                           \\
+\bottomrule
+\end{tabular}
+\end{table}
+ 
+\subsection{Feature Transmission: Worker Nodes to Aggregator}
+ 
+Each worker node transmits a 69 byte \textit{WorkerPayload} struct to the aggregator
+upon completing inference for each tile. The payload contains the tile ID (1~byte), raw
+attention logit (4~bytes as float32), and the quantised 64 dimensional feature vector
+(64~bytes as int8). At 69~bytes, this fits comfortably within a single \gls{esp}-NOW
+frame (250-byte maximum), requiring no fragmentation.
+ 
+The average one way transmission delay per payload was measured at 472~ms using a
+round trip ACK scheme with one way delay estimated as RTT/2. This figure is
+substantially higher than the theoretical \gls{esp}-NOW unicast latency of approximately
+2 to 5~ms and warrants explanation.
+ 
+The 472~ms figure reflects the queued transmission delay rather than raw channel latency.
+Because each worker node processes tiles sequentially and inference takes $\sim$2,657~ms
+per tile, payloads accumulate in the transmission queue during inference. The measured
+472~ms average therefore includes both the actual \gls{esp}-NOW channel time ($\sim$2 to 5~ms)
+and the queuing delay imposed by the serialised inference pipeline. The true channel
+transmission time for a 69 byte \gls{esp}-NOW packet is sub millisecond; the observed
+472~ms is a system level metric reflecting the pacing of the inference pipeline rather
+than a channel limitation.
+ 
+Total transmission time for all nine feature payloads (five from Worker~1 plus four from
+Worker~2) is approximately 4,248~ms ($9 \times 472$~ms), though in practice Worker~1
+and Worker~2 transmit in parallel once their respective inference completes, reducing
+the effective wall clock transmission time to approximately
+$\max(5,4) \times 472$~ms $= 2,360$~ms under ideal parallel operation.
+ 
+\subsection{Aggregator Node: Softmax, Weighted Sum, and Classification}
+ 
+The ESP32 aggregator node receives nine \textit{WorkerPayload} packets, performs softmax
+normalisation across the nine raw attention logits, computes the attention-weighted sum
+of the nine 64-dimensional feature vectors, and passes the resulting aggregated feature
+through the INT8 classifier to produce a binary label.
+ 
+The complete aggregator pipeline executed in 0.342~ms, making it the fastest stage in
+the entire system by four orders of magnitude. \Cref{tab:aggregator_latency} presents
+the aggregator latency breakdown.
+ 
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Aggregator Node Processing Latency}
+\label{tab:aggregator_latency}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Sub-stage}                                  & \textbf{Latency}  \\
+\midrule
+Softmax (9 logits) + weighted sum (9×64)            & $\sim$0.330~ms    \\
+Classifier inference (INT8, 64→32→2)                & $\sim$0.012~ms    \\
+\midrule
+Total aggregator delay                              & 0.342~ms          \\
+Classifier model size                               & 4~KB              \\
+Classifier arena                                    & $<$32~KB (SRAM)   \\
+\bottomrule
+\end{tabular}
+\end{table}
+ 
+The negligible aggregator latency confirms that the architectural decision to centralise
+only the lightweight aggregation and classification operations at the aggregator node
+rather than any feature extraction is well-founded. The 4~\gls{kb} INT8 classifier
+runs entirely from internal \gls{sram} with no PSRAM dependency, and the softmax
+and weighted sum operations involve only 9 scalar values and $9 \times 64 = 576$
+multiply-accumulate operations, well within the ESP32's capability at microsecond
+timescales.
+ 
+\subsection{End-to-End Pipeline Analysis}
+ 
+\Cref{tab:critical_path} presents the complete pipeline latency on the critical path
+(Worker~1 as bottleneck) alongside the 1,000~ms frame budget target.
+ 
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Critical Path Latency vs.\ Target Frame Budget}
+\label{tab:critical_path}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Stage}                        & \textbf{Latency}  & \textbf{\% of Budget} \\
+\midrule
+Frame capture + tiling                & 4~ms              & 0.4\%                 \\
+CAM → Worker 1 transmission           & 3,243~ms          & 324.3\%               \\
+Worker 1 inference (5 tiles)          & 13,284~ms         & 1,328.4\%             \\
+Worker 1 → Aggregator transmission    & 2,360~ms          & 236.0\%               \\
+Aggregator processing                 & 0.342~ms          & 0.03\%                \\
+\midrule
+Total critical path                   & $\sim$18,891~ms   & 1,889\%               \\
+Target frame budget                   & 1,000~ms          & 100\%                 \\
+\bottomrule
+\end{tabular}
+\end{table}
+ 
+The end-to-end pipeline currently operates at approximately 18.9$\times$ over the
+1,000~ms frame budget, with Worker~1 inference (13,284~ms) being the dominant
+bottleneck, contributing 70.3\% of total pipeline latency. Tile transmission from the
+\gls{esp}-CAM to the workers (3,243~ms) contributes a further 17.2\%, and feature
+transmission from workers to the aggregator contributes 12.5\%. The capture and
+aggregation stages together account for less than 0.03\% of total latency and are
+effectively free in comparison.
+ 
+\subsection{Quantisation and Model Size Analysis}
+ 
+\Cref{tab:quantisation} summarises the quantisation outcomes for all three deployed
+models.
+ 
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.25}
+\caption{Model Quantisation Summary}
+\label{tab:quantisation}
+\centering
+\small
+\begin{tabular}{p{2cm}p{2cm}p{1.5cm}p{1.5cm}p{1.8cm}p{2cm}}
+\toprule
+\textbf{Model} & 
+\textbf{FP32} \newline \textbf{Size} & 
+\textbf{INT8} \newline \textbf{Size} & 
+\textbf{Reduc-} \newline \textbf{tion} & 
+\textbf{Float32} \newline \textbf{Tensors} & 
+\textbf{Arena} \newline \textbf{Required} \\
+\midrule
+Tile extractor  & $\sim$155~KB \newline (ONNX) & 60~KB  & 2.6$\times$ & 0 & 451~KB \newline (PSRAM)  \\
+Attention head  & $\sim$11~KB \newline (ONNX)  & 6~KB   & 1.8$\times$ & 0 & $<$1~KB \newline (SRAM)  \\
+Classifier      & $\sim$9~KB \newline (ONNX)   & 4~KB   & 2.3$\times$ & 0 & $<$32~KB \newline (SRAM) \\
+\bottomrule
+\end{tabular}
+\end{table}
+ 
+All three models were verified to contain zero float32 activation tensors following the
+two-stage conversion pipeline (ONNX → TF SavedModel → TFLite INT8 via representative
+dataset calibration). The absence of hybrid quantisation where some layers remain in
+float32 was confirmed by iterating over all tensor details in the TFLite interpreter
+and checking quantisation scale parameters, resolving an earlier issue where
+\textit{onnx2tf}'s \textit{-oiqt} flag produced hybrid models that caused
+\textit{Hybrid models are not supported} errors on TFLite Micro.
+ 
+The tile extractor's arena requirement of 451~\gls{kb} despite the model itself being
+only 60~\gls{kb} reflects TFLite Micro's greedy memory planning strategy, which
+allocates scratch buffers for intermediate activations across the three
+\textit{LBCLayer} blocks. Each block processes feature maps of spatial dimensions
+up to 96×96, requiring substantial intermediate storage that cannot be released until
+the layer completes.
+ 
+\subsection{Discussion: Performance Gap and Path to Real-Time Operation}
+ 
+The results show a clear and quantifiable performance gap between the current prototype and the real time target. The system is architecturally correct: all pipeline stages work as intended, data flows correctly between nodes, \gls{int8} inference produces valid outputs, and the aggregator correctly fuses nine partial representations into a binary decision. However, the system currently does not meet the latency requirements to operate in real-time at 1 \gls{fps}.
+The results clearly point the way to close this gap. To reduce per tile inference time from 2657 ms to <150~ms, either the tile extractor arena needs to fit entirely within internal \gls{sram} (a model with arena requirement of $<\sim 180$~KB can be achieved by reducing the channel count or by simplifying the architecture), or a hardware platform with faster external memory such as the \gls{esp}32-P4 (with its on chip cache backed PSRAM) needs to be used. Meanwhile, the 3,243~ms Worker~1 transmission bottleneck could be addressed by swapping out the sequential ACK based fragmentation scheme for a broadcast based transmission or by increasing the \gls{esp}-NOW payload limit via custom fragmentation.
+The aggregator node, with its 0.342~ms processing time and 4~KB model footprint, confirms that the fusion and classification stage of the architecture imposes essentially zero overhead and would remain viable even as the upstream pipeline is accelerated by one to two orders of magnitude.
+
+ 

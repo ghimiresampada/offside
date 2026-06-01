@@ -1,0 +1,115 @@
+\chapter{CONCLUSION}
+ 
+\section{Achievements}
+ 
+This project addressed a fundamental constraint in edge deployed computer vision: the
+inability of resource limited microcontrollers to process high resolution imagery without
+destroying the spatial detail necessary for reliable detection. The proposed solution, a
+distributed tile based inference pipeline for \gls{hpd} demonstrated that spatially
+decomposed neural inference across a heterogeneous network of commodity ESP32 class
+hardware is not only architecturally feasible but implementable end to end without GPU
+acceleration, cloud offloading, or specialised neural processing hardware.
+ 
+The system successfully achieved the following concrete outcomes. A complete model
+training and quantisation pipeline was developed, converting a custom Improved
+\gls{lbcnn} from floating-point PyTorch to fully INT8 TensorFlow Lite Micro format,
+achieving approximately 4$\times$ model size reduction while preserving functional
+inference capability on the target hardware. The tile extraction, attention based feature
+aggregation, and binary classification pipeline was validated end to end in simulation,
+with per tile inference, transmission delay, and aggregator latency each measured
+independently through dedicated benchmark sketches. The distributed communication layer
+was implemented using the \gls{esp}-NOW protocol, enabling sub millisecond
+peer to peer transmission of 69 byte weighted feature payloads between worker nodes and
+the aggregator. Fragment based tile reassembly with duplicate suppression was implemented
+and validated on the ESP32-S3 worker nodes, demonstrating robustness to packet
+reordering under the 250 byte \gls{esp}-NOW frame size constraint. The full quantisation
+pipeline from PyTorch checkpoint through ONNX, TF SavedModel, and TFLite INT8
+conversion was automated into a single reproducible script, with all three sub module
+headers (tile extractor, attention, classifier) verified to contain zero float32 tensors
+prior to deployment.
+ 
+\section{Limitations}
+ 
+Several constraints were encountered during implementation that bound the current
+system's performance and generalisability.
+ 
+\textbf{Inference latency.} The dominant bottleneck in the system is the per tile inference time on the \gls{esp}32-S3 worker nodes, measured at approximately 2.68 seconds per tile when the TFLite arena is allocated in Octal PSRAM. This far exceeds the 1,000~ms target frame period, meaning the current implementation cannot sustain real time throughput at the intended 1 \gls{fps} capture rate. The root cause is the high latency of PSRAM access relative to internal \gls{sram}: the tile extractor requires approximately 451~KB of arena memory exceeding the \gls{esp}32-S3’s available internal \gls{sram} forcing all intermediate activations through the slower PSRAM bus. This is an architectural constraint of the chosen model and hardware compatibility rather than a software defect.
+
+ 
+\textbf{Model accuracy.} The reported validation accuracy of 35.87\% for the \gls{lbcnn} backbone is not good enough for deployment in a real detection system. This suggests the use of synthetic calibration data during INT8 quantisation instead of real validation imagery and a training dataset that might not be sufficiently representative of the diversity of human subjects and environmental conditions encountered in practice. The quantisation pipeline and deployment infrastructure are solid. The accuracy limitation is a function of the training data and training duration, not the architectural approach.
+ 
+\textbf{Hardware availability.}The absence of an ESP32-CAM during development prevented the full end to end pipeline from live frame capture, tiling, distributed inference and aggregated classification to be validated on real imagery. All tile inputs to the worker nodes during benchmarking were synthetic, generated programmatically to exercise the inference and communication pathways. System behavior on real world frames with real spatial variation has not been validated.
+
+\textbf{Fragment reassembly reliability.} The current tile fragmentation scheme sends 38
+sequential \gls{esp}-NOW packets per tile with a simple ACK wait flow control. Under
+network congestion or when both workers transmit simultaneously, packet collisions at the
+aggregator's receive buffer can cause fragment loss and incomplete tile reassembly. While
+duplicate suppression is implemented, a formal retransmission mechanism is absent.
+ 
+\textbf{Single channel input.} The model operates on grayscale (single channel) input,
+which discards chrominance information that could assist in distinguishing human subjects
+from similarly shaped environmental objects in colour imagery.
+ 
+\section{Future Work}
+ 
+Several concrete directions emerge from this work that would substantially improve the
+system's performance, robustness, and real world applicability.
+ 
+\textbf{Reducing inference latency.} The most critical improvement required is reducing
+per tile inference time below 200~ms to bring the system within budget for real time
+operation. Three approaches are worth exploring. First, model compression through
+structured pruning of the \gls{lbcnn} backbone could reduce the number of channels at
+each layer, directly shrinking the arena requirement to fit within internal \gls{sram}
+and eliminating the PSRAM latency penalty. Second, replacing the \gls{lbcnn} backbone
+with a MobileNetV3(Small) or EfficientNet(Lite) variant optimised specifically for TFLite
+Micro could achieve comparable feature extraction with a significantly smaller memory
+footprint. Third, the ESP32-S3's dual core architecture could be exploited more
+aggressively by pipelining fragment reassembly on Core~1 while inference runs on Core~0,
+reducing idle time between tiles.
+ 
+\textbf{Improving model accuracy.} The 35.87\% validation accuracy reported here
+reflects a proof of concept training run. A structured retraining effort using a curated
+human detection dataset such as a subset of the INRIA Person Dataset or Crowd human
+with proper data augmentation, class balancing, and extended training would be the most
+direct path to a deployable accuracy level. Additionally, using real image crops rather
+than synthetic Gaussian noise for INT8 calibration would improve quantisation quality
+and reduce accuracy degradation from the Float to INT8 conversion.
+ 
+\textbf{Real ESP-CAM integration.} Validating the complete pipeline with a live
+ESP32-CAM feed is the most important immediate next step. This would expose timing
+interactions between the capture cycle, fragmentation, transmission, and inference that
+are invisible in the synthetic benchmark setup. It would also reveal whether the 25\%
+tile overlap strategy adequately handles subjects positioned at tile boundaries in
+practice.
+ 
+\textbf{Reliable fragment transport.} Implementing a lightweight selective
+retransmission scheme where the worker requests retransmission of specific missing
+fragment indices rather than the entire tile would improve reassembly reliability under
+congestion without the overhead of a full TCP style sliding window protocol. An
+alternative is to switch from unicast \gls{esp}-NOW to a time division multiple access
+scheme where the CAM transmits to each worker in dedicated time slots, eliminating the
+collision problem entirely.
+ 
+\textbf{Scaling the node count.} The current architecture supports two worker nodes and
+one aggregator. Extending to four or more worker nodes each handling two or three
+tiles would allow processing of higher resolution input frames (e.g., 448×448 with 16
+tiles) while keeping per node tile count constant. The aggregator's softmax weighted sum
+aggregation is already node count agnostic, requiring only a change to the
+\textit{NUM\_TILES} constant.
+ 
+\textbf{Multi class detection.} The binary human/no human classifier could be extended
+to a multi class output predicting additional categories such as vehicle, animal, or
+background, making the system applicable to broader surveillance and wildlife monitoring
+use cases with minimal architectural change.
+ 
+\textbf{Privacy preserving deployment.} Because all processing occurs on device with no
+image data leaving the local \gls{espnow} network, the architecture is inherently
+privacy preserving relative to cloud based alternatives. Future work could formalise
+this property and explore the system's suitability for GDPR compliant deployments in
+public spaces where raw video transmission is legally restricted.
+ 
+\section{Final Remarks}
+ 
+This project shows that the boundary between what is considered feasible on microcontroller class hardware and the domain of systems exclusively accelerated with \gls{gpu} is not a hard line, it is an engineering problem. In this work we show that resolution preserving HPD can be achieved without centralised compute, cloud connectivity or specialised neural processing hardware by decomposing a spatial inference task into tile level subtasks, distributing them across a network of sub five dollar microcontrollers and aggregating their outputs by means of an attention weighted fusion mechanism.
+The deployed system is a research prototype with real performance limitations, most notably in inference latency and model accuracy. However, the infrastructure built the end to end quantization pipeline, the \gls{espnow} distributed communication layer, the fragment reassembly mechanism and the attention based aggregator constitutes a reusable foundation on which the identified improvements can be systematically applied. As \gls{mcu} clock speeds increase and TFLite Micro’s hardware acceleration support matures, the performance gap identified here will diminish. The architectural approach itself, spatially distributed, attention guided, feature level aggregation on heterogeneous edge nodes is not hardware specific and scales naturally to more capable devices as they become available at comparable cost and power envelopes.
+The broader significance of this work lies in its demonstration that intelligent sensor systems need not be centralised to be capable. In environments where privacy, latency, connectivity, and power are all constrained simultaneously, distributed edge inference of the kind demonstrated here represents a principled and practical path forward.

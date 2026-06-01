@@ -1,0 +1,39 @@
+\chapter{REQUIREMENTS ANALYSIS}
+\label{chap:requirements}
+
+The development of a distributed, tile-based \gls{hpd} system requires a multi level analysis of hardware constraints, software dependencies, and network reliability. The section below discusses the basic requirements needed for the project to be feasible.
+\section{Hardware Requirements}
+Given the ESP32-S3 chip in the design, the choice of hardware is based on the speed up and power consumption needs realted to \gls{ai}.
+
+\begin{itemize}
+    \item \textbf{Camera Module:} A high-resolution camera module(OV2640) capable of capturing images at higher resolution than traditional image processing systems, which will then be partitioned.
+    \item \textbf{Input Node:} A master node responsible for taking images from the image sensor; partitioning them into multiple tiles and distributing them to edge nodes.
+    \item \textbf{Edge Computing Nodes:} Multiple ESP32-S3 \glspl{mcu} are required. These must support the $Xtensa® LX7$ vector instructions to handle the tile-level \gls{cnn} inference.
+    \item \textbf{Aggregator Node:} A  simple ESP32 responsible for collecting feature vectors and executing the final classification layer.
+    \item \textbf{Communication Interface:} A low-latency communication system for inter-node communication \glspl{espnow}.
+\end{itemize}
+
+\section{Software \& Framework Requirements}
+To achieve ultra-low bit quantization and distributed processing, the following software stack is required:
+
+\begin{itemize}
+    \item \textbf{Development Environment:} Arduino IDE using C/C++.
+    
+    \item \textbf{AI Inference Library:} The \gls{esp-dl} makes use of effiecient kernels for quantization 8-bit or 16-bit computation.
+
+    \item \textbf{Model Optimization:} Initial training and conversion of models with \gls{tfml} are followed by \gls{qat}.
+    
+    \item \textbf{Tiling Logic:} A custom C++ pre-processing module to handle spatial partitioning and memory-safe buffer management for individual tiles.
+\end{itemize}
+
+
+\section{Non-functional Requirements}
+\begin{itemize}
+    \item \textbf{Latency:} There will be low latency in order for this to be a real time application.
+    
+    \item \textbf{Scalability:} This would require an adjustable number of nodes, depending on the
+level of resolution and required \gls{fps}.
+    
+    \item \textbf{Robustness:} If one of the nodes is no longer working, it will need to fall back to the other nodes
+to get partial occupancy information.
+\end{itemize}

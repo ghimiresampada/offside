@@ -1,0 +1,371 @@
+\chapter{SYSTEM ARCHITECTURE AND METHODOLOGY}
+\section{Model Selection and Optimization Pipeline}
+\subsection{MobileNetV2 Architecture}
+The proposed system leverages a \gls{cnn} based on a mobilenetv2 backbone, specifically optimized for binary classification tasks where $f_{\theta} : \mathbb{R}^{N \times 1 \times H \times W} \to \mathbb{R}^{N \times 2}$. The architecture is designed to balance high level feature extraction with the strict hardware constraints of \glspl{mcu}.
+
+\subsection*{Grayscale Adaptation and Transfer Learning}
+To minimize memory consumption and computational latency, the model is adapted to process single channel grayscale images. Since the pretrained weights were originally optimized for rgb data, the first convolution layer's weights ($W \in \mathbb{R}^{C_{out} \times 3 \times k \times k}$) are averaged across the channel dimension:
+\begin{equation}
+    \label{eq:greyscale}
+    Y = 0.299R + 0.587G + 0.114B
+\end{equation}
+This technique retains low level feature detection, such as edge detectors and textures, while allowing the model to function on simplified Static Random Access Memory \gls{sram} efficient inputs.
+
+\subsection*{Classifier Head and Loss Function}
+The final classification is performed by a narrow bottleneck head ($1280 \to 64 \to 2$) using ReLU activation and dropout ($0.2$ and $0.1$) to prevent overfitting. The resulting logits $\hat{y}$ are evaluated using Cross-Entropy Loss:
+\begin{equation} L = - \sum_{i=1}^{2} y_i \log \left( \frac{e^{\hat{y}_i}}{\sum_{j} e^{\hat{y}_j}} \right) \end{equation}
+
+\subsection{Local Binary Convolution Based Architecture}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{src/images/lbc big image .drawio (1).png}
+    \caption{Multi-Tile Attention-Based CNN Architecture}
+    \label{fig: Local Binary Convolution based Architecture}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{src/images/second image .drawio.png}
+    \caption{ Detailed Schematic of the Local Binary Convolution Module}
+    \label{fig: Local Binary Convolution based Architecture}
+\end{figure}
+
+\subsection*{LBCLayer Overview}
+The LBCLayer is a hybrid convolutional layer designed to combine fixed binary convolutions (anchors) for efficient sparse structural feature capture with a learnable $1\times1$ convolution for task-specific adaptation. It is particularly suitable for resource-efficient networks and sparse feature representations, inspired by research on \gls{lbc} and sparse binary kernels.
+
+Mathematically, for an input $x \in \mathbb{R}^{N \times C_{in} \times H \times W}$, the output is defined as:
+\begin{equation}
+    x_{\text{out}} = \text{Conv1x1}(\text{ReLU}(\text{Conv}_{\text{binary}}(x)))
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $\text{Conv}_{\text{binary}}$ uses fixed ternary weights $\in \{-1, 0, 1\}$.
+    \item $\text{Conv1x1}$ is trainable and combines channels efficiently.
+\end{itemize}
+\subsection*{LBCLayer Components}
+\subsection*{1. Fixed Anchor Convolution}
+The purpose of this component is to extract general features without learning, thereby reducing the parameter count. 
+\begin{itemize}
+    \item \textbf{Weight generation}: The first step is the creation of weights matrix $W \sim \mathcal{N}(0, 1)$ and its sparsifying with parameter $s$:
+    \[ \text{binary\_weight}_{i,j,k,l} = \begin{cases} 1 & \text{if } W_{i,j,k,l} > \text{threshold} \\ -1 & \text{if } W_{i,j,k,l} < -\text{threshold} \\ 0 & \text{otherwise} \end{cases} \]
+    \item The sparsity parameter $s$ will define how many zeros will there be in the matrix.
+    \item This matrix of weights is saved as a buffer (\texttt{register\_buffer}), which means it won't be trained afterwards.
+\end{itemize}
+The main idea is to capture general directional/edge patterns efficiently similar to handcrafted filters like Sobel, but stochastically generated.
+
+\subsection*{2. Non-linearity (ReLU)}
+After the fixed binary convolution, non linearity is applied by ReLU: $x' = \text{ReLU}(x)$. Non linearity is introduced to help approximate complex functions, which also maintain sparsity and improving computational efficiency since there will be a lot of zeros. 
+\subsection*{3. Learnable 1x1 Convolution}
+The $1\times1$ kernel combines sparse feature maps into task relevant channels while keeping computational costs low. 
+\begin{equation}
+    x_{\text{final}} = W_{1\times1} * x'
+\end{equation}
+Only this part is trainable, allowing the layer to adapt to specific tasks like human detection.
+\subsection*{Forward Pass Flow}
+For a single LBCLayer, the flow is as follows:
+\begin{enumerate}
+    \item The input to the layer is $x \in \mathbb{R}^{N \times C_{in} \times H \times W}$.
+    \item Perform binary convolution using fixed parameters: $x_1 = \text{Conv}_{\text{binary}}(x)$.
+    \item Use ReLU activation function: $x_2 = \text{ReLU}(x_1)$.
+    \item Perform 1x1 convolution using learnable parameters: $x_{\text{out}} = \text{Conv1x1}(x_2)$.
+    \item Output: $x_{\text{out}} \in \mathbb{R}^{N \times C_{\text{out}} \times H \times W}$.
+\end{enumerate}
+\subsection*{Advantages of LBCLayer}
+\begin{itemize}
+    \item \textbf{Computational efficiency}: Fixed sparse weights reduce multiply adds, and $1\times1$ learnable convolutions are computationally cheap.
+    \item \textbf{Stability}: Binary anchors are not updated, which avoids noisy gradients and the network only optimizes the final $1\times1$ convolution.
+    \item \textbf{Sparsity Control}: The sparsity parameter allows control over network complexity and feature density so that encouraging sparse representations that improve generalization.
+    \item \textbf{Compatibility with Tilings}: LBCLayer is very well suited for tiling based systems such as
+Human detector where individual tiles can be processed separately before being assembled.
+    \item \textbf{Biological Inspiration}: Sparse and binary inspired filters mimic biological visual cortex
+processing that is helpful for edge detection and texture recognition.
+\end{itemize}
+\subsection*{Mathematical Summary}
+Considering the inputs $x$, the summary of the operation and gradients are as follows:
+\begin{align*}
+    \text{Anchor weight: } A &= f_{\text{binary}}(W, s) \\
+    x_1 &= x * A \\
+    x_2 &= \text{ReLU}(x_1) \\
+    x_{\text{out}} &= x_2 * W_{1\times1} 
+\end{align*}
+\textbf{Gradients}: $\frac{\partial L}{\partial W_{1\times1}} \neq 0$, whereas $\frac{\partial L}{\partial A} = 0$. 
+In this case, $*$ denotes a convolution, $s$ denotes the sparsity threshold, and $A$ denotes the fixed binary anchor weights.
+\subsection*{Overview of \gls{hpd}}
+The \gls{hpd} (HumanDetector) is a \textbf{tile based convolutional network} designed to detect humans in images. Its key characteristics:
+\begin{enumerate}
+    \item \textbf{Inputs:} $x \in \mathbb{R}^{N \times 1 \times H \times W}$ grayscale images. 
+    \item \textbf{Tiling:} Divide image into $\text{tile\_rows} \times \text{tile\_cols}$ patches without overlaps.
+    \item \textbf{Per tile Feature Extraction:}  The use of LBCLayer to perform sparse and task-aware feature extraction from each patch.
+    \item \textbf{Features Aggregation / Stitching:} Features from all the patches aggregated into one feature vector.
+    \item \textbf{Classifier Head:} The output dense layers that provide logit values for \texttt{\detokenize{num_classes}}. (E.g., Human vs. Not Human).
+\end{enumerate}
+
+Mathematically:
+\begin{equation}
+f_{\theta}(x) = \text{Classifier} \left( \text{Concat}_{i,j} (\text{TileExtractor}(x_{i,j})) \right)
+\end{equation}
+Where $x_{i,j}$ is the $(i, j)$-th tile.
+
+\subsection*{Tiling Stage}
+The tiling stage prepares the input for localized processing.
+\begin{itemize}
+    \item \textbf{Input:} $x \in \mathbb{R}^{N \times 1 \times H \times W}$
+    \item \textbf{Parameters:} $\text{tile\_rows}$, $\text{tile\_cols}$
+    \item \textbf{Tile size:}
+    \begin{equation}
+    h = \frac{H}{\text{tile\_rows}}, \quad w = \frac{W}{\text{tile\_cols}}
+    \end{equation}
+    \item \textbf{Split input into tiles:}
+    \begin{equation}
+    x_{i,j} = x[:, :, i \cdot h : (i+1) \cdot h, j \cdot w : (j+1) \cdot w]
+    \end{equation}
+\end{itemize}
+
+\textbf{Purpose:}
+\begin{itemize}
+    \item Localizes feature extraction $\rightarrow$ each tile acts as a \textbf{node} (\gls{mcu}-like processing).
+    \item Improves \textbf{spatial granularity} for detecting humans.
+    \item Tiles are \textbf{independent}, can be processed in parallel.
+\end{itemize}
+
+\subsection*{Tile Feature Extractor (\gls{lbc}-based)}
+Every tile goes through \textit{tile\_extractor} whose structure is described below:
+\begin{itemize}
+    \item \textbf{LBC Layer 1:} $1  to 16$ channels with $\text{sparsity}=0.9$.
+    \item \textbf{MaxPool2d:} Kernel size 2 by reducing spatial dimensions by half.
+    \item \textbf{LBC Layer 2:} $16  to 32$ channels with $\text{sparsity}=0.9$.
+    \item \textbf{AdaptiveAvgPool2d:} pooling spatial dimensions to 1 × 1.
+\end{itemize}
+
+For individual tile $x_{i,j}$:
+\begin{equation}
+x' = \text{LBCLayer}(x_{i,j}) = \text{Conv1x1}(\text{ReLU}(\text{Conv}_{\text{binary}}(x_{i,j})))
+\end{equation}
+
+\subsection*{Aggregation / Stitching}
+After feature extraction, the tile outputs get aggregated together:
+\begin{enumerate}
+    \item \textbf{Flatten the output for each tile:} $f_{i,j} \in \mathbb{R}^{32}$
+    \item \textbf{Concatenate all tiles:} 
+    If $\text{number of tiles} = \text{tile\_rows} \times \text{tile\_cols}$:
+    \begin{equation}
+    f_{\text{combined}} = [f_{1,1}, f_{1,2}, \dots, f_{\text{tile\_rows,tile\_cols}}] \in \mathbb{R}^{32 \cdot \text{num\_tiles}}
+    \end{equation}
+\end{enumerate}
+This process can be considered analogous to graph aggregation, treating every tile as a graph node
+\subsection*{Classifier Head}
+The classifier performs an MLP on the concatenated vector:
+\begin{itemize}
+    \item \textbf{Input:} $f_{\text{combined}} \in \mathbb{R}^{32 \cdot \text{number of tiles}}$
+    \item \textbf{Layers:} $\text{Linear}(32 \cdot \text{number of tiles} \rightarrow 64) \rightarrow \text{ReLU} \rightarrow \text{Linear}(64 \rightarrow \text{num\_classes})$
+    \item \textbf{Output Classificaation Logits:}
+     \begin{equation}
+    \hat{y} \in \mathbb{R}^{N \times \text{num\_classes}}
+    \end{equation}
+\end{itemize}
+Uses \textbf{CrossEntropyLoss} when training:
+\begin{equation}
+L = -\sum_{c=1}^{\text{num\_classes}} y_c \log \text{softmax}(\hat{y}_c)
+\end{equation}
+
+\subsection*{Computational Efficiency}
+The LBCLayer reduces \glspl{flops} significantly:
+\begin{equation}
+\text{FLOPs} \approx C_{in} \cdot C_{out} \cdot k^2 \cdot H \cdot W
+\end{equation}
+\begin{itemize}
+    \item \textbf{Binary conv:} Multiplications are basically simple additions/subtractions.
+    \item \textbf{1x1 conv:} Provides lightweight mixing of channels.
+    \item \textbf{Tile based processing:} Can be parallelized across multiple nodes.
+\end{itemize}
+
+\subsection*{Mathematical Summary of Forward Pass}
+\begin{enumerate}
+    \item \textbf{Tile splitting:}
+    \begin{equation}
+    \{x_{i,j}\}_{i,j=1}^{R,C} = \text{Tile}(x)
+    \end{equation}
+    \item \textbf{Feature extraction (per tile):}
+    \begin{equation}
+    f_{i,j} = \text{AdaptiveAvgPool2d}(\text{LBCLayer2}(\text{MaxPool2d}(\text{LBCLayer1}(x_{i,j}))))
+    \end{equation}
+    \item \textbf{Flatten and concatenate:}
+    \begin{equation}
+    f_{\text{combined}} = \text{Concat}([f_{i,j}])
+    \end{equation}
+    \item \textbf{Classification:}
+    \begin{equation}
+    \hat{y} = \text{Linear}_2(\text{ReLU}(\text{Linear}_1(f_{\text{combined}})))
+    \end{equation}
+    \item \textbf{Loss:}
+    \begin{equation}
+    L = -\sum_{c=1}^{\text{num\_classes}} y_c \log \text{softmax}(\hat{y}_c)
+    \end{equation}
+\end{enumerate}
+
+\subsection*{Advantages of \gls{hpd} Architecture}
+\begin{enumerate}
+    \item \textbf{Sparse and efficient:} \gls{lbc} reduces compute and memory footprint.
+    \item \textbf{Tile based learning:} Learns local patterns for small human parts.
+    \item \textbf{Flexible:} Can adapt tile size and sparsity based on resources.
+    \item \textbf{Parallelization:} Processed independently per tile.
+    \item \textbf{Low data scenario:} Set anchors minimize training needs.
+\end{enumerate}
+\section{Hardware Requirements and system configuration}
+The design employs a distributed architecture that is multi-node based on the ESP32
+and ESP32-S3 \gls{mcu}. In order to maximize efficiency and take advantage of limited resources, the system is structured hierarchically in three levels.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{src/images/Downsampling.drawio.png}
+    \caption{System Architecture showing main components and their interactions.}
+    \label{fig:System Architecture showing main components and their interactions.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{src/images/Untitled Diagram.drawio(1).png}
+    \caption{Detailed Data Flow Diagram of the Tiling and Inference Pipeline.}
+    \label{fig:detailed_workflow}
+\end{figure}
+\subsection{Input Layer}
+Centered around an ESP32-CAM\cite{dfrobot2024ens160}, this layer manages high bandwidth data acquisition and initial pre processing. Its primary role is to prepare and distribute workloads to the processing tier through the following pipeline:
+% \subsubsection{\textbf{Temporal Downsampling}}
+% The raw input from the ESP32-CAM typically operates at a higher frame rate (e.g., 10 - 15 \gls{fps}) than the backend processing can handle. The input node implements a timer-driven interrupt to capture exactly 1 frame every 1000 \gls{ms}.
+
+\subsubsection{\textbf{Luminance Conversion (Grayscale)}}
+Processing three channel RGB data significantly inflates the memory buffer requirements and computational complexity ($O(3n)$ vs $O(n)$). The captured frame has to be converted to an 8 bit grayscale format using a weighted luminance formula as given in \eqref{eq:42}  \cite{itu2011bt601}.
+\begin{equation}
+    \label{eq:42}
+    P(y = 1 \mid x) = \frac{e^{z_{\text{person}}}}{e^{z_{\text{bg}}} + e^{z_{\text{person}}}}
+\end{equation}
+% \cite{goodfellow2016deep}
+Where $z_{\text{person}}$ and $z_{\text{bg}}$ represents the logits corresponding to \textit{person} and \textit{background} class,
+respectively. Data compression reduces the input data volume by 66.6\%, hence
+leaving more room for heap memory allocation for tiling and transmission buffers.
+\begin{equation}
+    \label{eq:greyscale}
+    Y = 0.299R + 0.587G + 0.114B
+\end{equation}
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=1\linewidth]{src/images/RGBtoGreyscale.png}
+%     \caption{RGB to Grayscale}\cite{skimage_grayscale}
+%     \label{fig: RGB to Grayscale}
+% \end{figure}
+\subsubsection{\textbf{Partitioning Distribution}}
+The process begins with the Tiling module, which extracts $n$ overlapping tiles from the source image. This step is critical for maintaining high resolution features on resource constrained hardware. By using a 25\% overlap between adjacent tiles, the system ensures that human subjects positioned at tile boundaries are not bisected, preserving spatial continuity for the feature extractor.
+
+\subsection{Communication Protocol Implementation}
+The \gls{esp} protocol will be the communication backbone\cite{espnow_doc}, selected for its highly efficient, peer to peer data exchange capabilities and low latency feedback. While \gls{esp} is efficient, its throughput is limited (observed maximums up to 771 \gls{kb}/s). Therefore, the implementation will rely on efficient data packing, ensuring that tile data transfer maximizes the available throughput and that result packets adhere to the small packet size limits ($<250$ bytes for control and aggregation data). The ability to transfer data quickly is paramount, as the latency gained by parallel processing can be quickly lost if the communication time dominates the total system latency.
+
+
+\subsection{Feature Extraction Layer}
+\begin{itemize}
+    \item Parallel Processing: Each node receives a specific low resolution tile from the Input Layer.
+    \item Local Inference: Each node runs the \gls{hpd} model on its assigned tile, extracting features and computing an attention weight that indicates the likelihood of human presence in that tile.
+    \item Output Generation: Each node outputs a feature map and an attention weight, which are then transmitted to the Output Layer for aggregation and final decision-making.
+\end{itemize}
+
+\subsection{Output Layer (Aggregation \& Logic)}
+
+This layer is the last stage of the architecture and it is the core decision making layer. The feature map and the attention weight of each tile are taken from the feature extracter nodes, and the following operations are performed:
+ \begin{itemize}
+     \item \textbf{Attention score calculation:} The attention score for each tile is computed using the SoftMax function, which normalizes the quantized scores into a probability distribution.This allows the system to  make weighted final decision.
+     \item \textbf{Weighted faeture aggregation:} Using the attention scores, we do a weighted sum of the feature maps from all tiles. This effectively combines the information, while giving more weight to tiles that are more likely to contain human features.
+     \item \textbf{Final Classification:}The aggregated feature map is then passed to a classifier layer (e.g., fully connected layer) to compute a confidence score for the presence of a human in the whole scene. This score is then used to make a binary decision (human detected or not) that can be displayed on an output device such as an LCD screen.
+ \end{itemize}
+
+\newpage
+\section{Hardware Used}
+The core hardware of this project is based on the \glspl{mcu} of the ESP32-family. It is chosen because they are low cost, low power, and can run edge-level machine learning tasks. This system uses a distributed architecture. Here, image capturing, processing and decision-making are separated across different ESP32 devices to overcome memory and processing limitations of a single microcontroller. This hardware design allows the system to perform real-time \gls{hpd} without relying on cloud servers, making it faster, more private, and more energy efficient.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{src/images/wi.png}
+    \caption{Wiring Interface between Programming (FTDI), Processing (ESP32-S3), and Visualization (I2C \gls{lcd}) Units.}
+    \label{fig:Wiring.}
+\end{figure}
+The hardware architecture as shown in \ref{fig:Wiring.} consists of a distributed processing network designed for real-time data acquisition and visualization. The system is partitioned into three primary functional blocks: the Sensing Node (ESP32-CAM), the Processing Cluster (ESP32-S3 units), and the Output Interface (I2C \gls{lcd} connected via ESP32)
+\subsection{\textbf{ESP32-CAM}}
+The \gls{esp}-CAM module is used as the input hardware of the system. Its main role is to capture visual data from the environment. Here, the camera continuously captures images of $224 \times 224$ at a controlled rate of 1 every 15 seconds. Since color images require more memory and computation, the \gls{esp}-CAM converts the captured rgb images into grayscale format. After this, the high-resolution image is divided into smaller tiles of $96 \times 96$ with overlap of $25\%$ between adjacent tiles. These smaller image tiles are easier to process and then transmit to other \gls{esp} devices using \gls{espnow} protocol for further processing. Here, the tiles are evenly distributed between the two esp32s3 devices when the total number of tiles is even; if the number of tiles is odd, the first node is assigned one additional tile.
+
+\subsection{\textbf{USB to TTL converter (FTDI)}}
+The USB to TTL (FTDI) converter is used to connect the ESP32-CAM boards to a laptop for programming. It is because ESP32-CAM does not have a built-in USB interface for programming or serial communication. The FTDI module acts as a bridge between them since a laptop communicates using USB and the ESP32 uses TTL serial (UART) signals. In this project, the FTDI also supplies 5V power from the laptop via USB, which removes the need for an external power source.
+
+Connect GPIO0 to GND in ESP32-CAM for flashing. This indicates that the ESP32-CAM is ready to receive new code. After uploading the code, we can disconnect GPIO0 from GND.
+
+% \subsection*{Wiring the FTDI to ESP32-CAM}
+\begin{table}[h]
+\centering
+\caption{Wiring the FTDI to ESP32-CAM}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{FTDI} & \textbf{ESP32-CAM} \\ \hline
+VCC           & 5V                 \\ \hline
+GND           & GND                \\ \hline
+RX            & U0T                \\ \hline
+TX            & U0R                \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{\textbf{ESP32-S3}}
+The ESP32-S3 \glspl{mcu} act as the processing or inference nodes in the system.Each ESP32-S3 receives a small image tile from the ESP32-CAM, on which it runs a Tiny Machine Learning (TinyML)-based HPD model. These boards are selected because they are optimized for AI workloads and support low-bit operations. These are necessary to run neural networks with limited memory. Each ESP32-S3 processes its assigned tile independently and decides if human features are present.Each ESP32-S3 receives a small image tile from the ESP32-CAM, on which it runs a Tiny Machine Learning (TinyML)-based HPD model. These boards are selected because they are optimized for AI workloads and support low-bit operations. These are necessary to run neural networks with limited memory. Each ESP32-S3 processes its assigned tile independently and decides if human features are present.Instead of sending large image data back, it sends only a compact result, such as a confidence score and tile location, which minimizes communication overhead.
+
+ \subsection{\textbf{ESP32}}
+The ESP32 board is used as the aggregation node of the system. It is used to collect the results from all ESP32-S3 and uses attention weight from all tiles to compute attention score using SoftMax function and then uses the attention score to perform weighted sum of feature maps of tiles. Then, it passes the new feature map through classifier layer to compute the confidence score. This confidence score is to form a final decision about human presence in the entire scene. 
+
+
+\subsection{\textbf{I2C \gls{lcd} Display}}
+In this system, the I2C \gls{lcd} display is used to show the final output of the project. After the ESP32-S3 boards finish processing the image tiles and send their results, the ESP32 combines all the information and decides whether a human is present or not. This final decision is then shown on the \gls{lcd} screen as \textbf{“Human Detected”} or \textbf{“No Human Detected”.} The I2C \gls{lcd} has been chosen because it needs only two wires for communication. It keeps the wiring simple and saves GPIO pins on the ESP32.
+
+% \subsection*{Wiring the I2C LCD to ESP32 }
+\begin{table}[h]
+\centering
+\caption{Wiring the I2C LCD to ESP32}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{I2C LCD Pin} & \textbf{ESP32 Pin} & \textbf{Purpose}     \\ \hline
+VCC                  & 3.3V or 5V         & Power Supply         \\ \hline
+GND                  & GND                & Ground Connection    \\ \hline
+SDA                  & GPIO21             & Data Line            \\ \hline
+SCL                  & GPIO22             & Clock Line           \\ \hline
+\end{tabular}
+\end{table}
+
+
+\subsection{\textbf{Power Supply}}
+All hardware components in the system are powered through USB connections using a laptop During development and testing, the laptop provides stable 5V power supply to the ESP32-CAM, ESP32-S3 and ESP32 boards. 
+\subsection{Low Bit Quantization Implementation}
+The baseline operational model will use Post training Quantization (PTQ) to convert the HPD model to symmetric 8 bit Integer (INT8) weights and asymmetric INT8 activations. 
+Further optimization will involve the experimental deployment of \gls{int4} quantization for specific non critical layers. This mixed precision approach will push memory reduction to its architectural limits, targeting a final Flash footprint of $<1.0$ \gls{mb}.
+To compensate for the precision loss due to such aggressive compression, calibration datasets will be used along with layer wise equalization techniques. These methods balance weight ranges in the custom architecture with the aim of maximal accuracy retention less than $90\%$ of the pruned 32-bit Floating Point \gls{fp32} baseline. This optimization is necessary to provide a robust model for presence detection, and to fit within the 512 \gls{kb} \gls{sram} limit.
+
+\section{Evaluation Metrics and Performance Framework}
+\subsection{Detection Reliability Matrix (The Deep Learning Layer)}
+
+The main goal is to fix the stationary detection issue that \gls{pir} sensors have. The following standard computer vision criteria will be used to assess our \gls{cnn} model:
+
+\textbf{Recall (Sensitivity)}
+
+Measured especially for participants who are motionless to demonstrate the system's capacity to sustain presence signals in situations where movement is minimal. The Equation is as shown in equation (3-3):
+\begin{equation}
+Recall = \gls{tp} / (\gls{tp}+\gls{fn})
+\end{equation}
+
+\textbf{Precision}
+
+To ensure environmental noise (shadows, \gls{hvac} airflow) does not trigger false positives in the model's inference. The Equation is as shown in equation (3-4):
+\begin{equation}
+Precision = \gls{tp} / (\gls{tp}+\gls{fp})
+\end{equation}
+
+\subsection{Distributed System Efficiency Matrix (The Computing Layer)}
+We must measure the benefits of distributing the inference burden among several ESP32-S3 nodes using the \gls{dat} framework as this project makes use of a Distributed Cluster.
+
+\textbf{End-to-End Latency (total):} The duration between the Master node's picture acquisition and the ultimate detection outcome.
+
+\textbf{Memory Footprint: } Maximum \gls{sram} used by any single node during inference.
+
+\textbf{Communication Delay:} The proportion of the entire cycle used for local Deep learning computation as opposed to \gls{esp} tile transmission.
