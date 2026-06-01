@@ -1,17 +1,51 @@
 \chapter{LITERATURE REVIEW}
-Standard sensors struggle to detect people who are not moving. Ahmad et al. \cite{Ahmad2021}  studied hybrid systems that combine PIR and Radar sensors to improve detection in smart buildings. Combining the two reduced false alarms, the system still showed nearly 0\% reliability when occupants were completely still. The study did not explore visual confirmation as a solution. This leaves a gap that computer vision can fill, by detecting the small physical movements that people make even at rest.
-
-Running vision models on small hardware requires significantly reducing input size. Nagel et al. \cite{nagel2021white} examined INT8 Post-Training Quantisation, a technique that converts model weights from 32-bit floating point to 8-bit integers. This reduces memory usage by four times with less than 1\% reduction in accuracy. However, the study does not address the specific constraints of microcontroller based devices like the ESP32-S3, which has only 512 KB of SRAM \cite{esp32s3_datasheet} . Deploying on such hardware requires additional instruction-level optimisations that the paper does not cover.
-
-Wu et al. \cite{wu2016qcnn} explored further compression through the Q-CNN framework. Rather than simply reducing weight size, Q-CNN focuses on matching the output of compressed layers to the original model as closely as possible. This allows models to be compressed by up to 20 times while maintaining strong classification performance. The limitation is that the study only tests single-device deployment and does not address how to process high-resolution images across multiple low-power nodes.
-
-Iandola et al. \cite{iandola2016squeezenet} introduced SqueezeNet, which replaces large convolutional filters with smaller 1×1 layers called Fire Modules. The result is a model that matches AlexNet accuracy using 50 times fewer parametersmaking it well suited for mobile and embedded devices. However, SqueezeNet was not designed for ultra-low-bit operations, which are needed when deploying on the most power-constrained hardware used in this project.
-
-Juefei-Xu et al. \cite{juefei2017lbcnn} took efficiency further with Local Binary Convolutional Neural Networks \gls{lbcnn}. Instead of learned filters, LBCNN uses fixed binary kernels that do n’t change during training process. This reduces the number of parameters by 169 times and speeds up inference in the same way. The drawback is that LBCNN has no builtin way to handle very large resolution images, which are too large to fit in the memory of most microcontrollers.
-
-Li et al. \cite{li2020pytorch}  studied how large images can be broken into grids of smaller sections for processing in deep learning systems. Their findings confirmed that tiling does preserves fine spatial detail that is lost when an image is resized. The study was conducted on GPU clusters, however, and does not provide a communication protocol suited for small, low-power device clusters
-
-Akyon et al. \cite{akyon2022sahi} addressed small object detection directly through the SAHI framework which converts  a high-resolution image into overlapping patches and runs inference on each one separately. This improves detection accuracy for small objects by 20 to 30\% \cite{akyon2022sahi}. The framework is computationally heavy, though, and was designed for powerful workstations rather than real-time edge deployment. In a distributed system, the speed at which devices communicate matters in the same level as accuracy. 
-
-Jeong et al. \cite{jeong2021} studied low-latency communication protocols for clustered IoT devices. Their results showed that peer-to-peer protocols can achieve latency as low as 1.115 ms, which is fast enough for real-time synchronisation. Even though the study did not test image tile transmission specifically, which involves far more data than simple sensor readings.
-This project addresses all of these gaps together by deploying a real-time distributed tiling system on ESP32-S3 microcontroller based architecture, combining spatial decomposition, model quantisation, and low-latency communication in a single pipeline designed for resource-constrained hardware.
+\section{Related Works}
+ 
+Human Pose Estimation (HPE) forms the foundational stage of any vision-based motion capture system. Kim et al. \cite{kim2023} demonstrated the effectiveness of MediaPipe Pose in a two-stage pipeline running on a single-board computer mounted on a mobile robot, achieving a mean joint coordinate difference of 0.097~m and an average angle difference of 10.017 degrees per joint across six daily poses. The study confirmed that MediaPipe provides a practical balance between computational cost and accuracy for real-time embedded applications, directly supporting its adoption as the pose estimation backbone in the proposed system.
+ 
+Sarkar et al. \cite{sarkar2022} implemented a multi-camera system for close-proximity human-robot collaboration in construction environments, using MediaPipe Pose to extract 15 keypoints per frame from each camera view and converting them to 3D coordinates through rotation, translation, and homogeneous transformation matrices derived from known camera positions and orientations. This work is the closest architectural match to the proposed pipeline, validating the feasibility of combining MediaPipe with a multi-camera setup for real-world 3D joint reconstruction without specialized depth hardware.
+ 
+Zell et al. \cite{zell2024} presented a multimodal human motion dataset containing 51,051 poses from 71 persons, obtained by extracting 2D keypoints using MediaPipe Human Pose Landmarker from virtual multi-camera images and computing corresponding 3D keypoints by linear triangulation. Their dataset was explicitly intended for transforming computer vision pose solutions into biomechanical simulations, constituting a direct proof of concept for the MediaPipe-plus-triangulation pipeline proposed in MotionBridge.
+ 
+Bultmann and Behnke \cite{bultmann2021} proposed a distributed multi-camera architecture where 2D joint detection is performed locally at each smart edge sensor and only the semantic skeleton representation is transmitted to a central backend for 3D triangulation. Their system achieves real-time 3D pose estimation while significantly reducing network bandwidth, and incorporates prior human skeleton knowledge into the triangulation backend to improve robustness — an architectural approach directly relevant to the distributed and real-time requirements of the proposed system.
+ 
+Bragagnolo et al. \cite{bragagnolo2024} addressed the known limitation of standard triangulation under occlusion by performing multi-view fusion on 3D skeletons from monocular methods rather than fusing noisy 2D features, applying reprojection error optimization with limb-length symmetry constraints. Their method significantly outperformed standard triangulation in human-robot collaboration scenarios with heavy occlusion, identifying a clear accuracy upgrade path for the proposed system beyond its baseline triangulation implementation.
+ 
+Leroy et al. \cite{leroy2023} extended multi-view 3D pose estimation to uncalibrated camera setups through Probabilistic Triangulation, using Monte Carlo sampling to iteratively estimate camera pose distributions. Their experiments on Human3.6M and CMU Panoptic benchmarks demonstrated that accurate 3D reconstruction is achievable without fixed camera calibration, which is relevant when the proposed system is deployed in environments where precise camera recalibration is impractical.
+ 
+Liang et al. \cite{liang2024} proposed the most directly related simulation-based work, integrating 3D HPE with PyBullet for robotic arm motion imitation. Their pipeline extracts human arm motion from video using a Strided Transformer network, retargets the human morphology to a robot URDF model, generates reference trajectories in PyBullet using its built-in Inverse Kinematics solver, and applies deep reinforcement learning for policy training. However, their system operates offline on monocular pre-recorded video and targets robot policy training rather than dataset generation, distinguishing it from the real-time multi-camera focus of MotionBridge.
+ 
+Jiang et al. \cite{jiang2025} demonstrated real-time multi-person arm motion imitation using a single RGB-D camera and an improved retargeting algorithm, achieving consistent arm configuration and precise end-effector tracking for multi-robot collaboration tasks. While their system confirms that real-time arm motion replication is feasible, it relies on expensive RGB-D hardware for depth acquisition, whereas MotionBridge targets equivalent real-time performance using only standard RGB cameras with computational triangulation, substantially lowering the deployment cost.
+ 
+Faria et al. \cite{faria2025} presented a teleoperation framework combining MediaPipe landmark detection with an Intel RealSense RGB-D camera for 3D joint reconstruction, mapping the results to a robot arm's kinematic constraints in real-time. Their work explicitly noted that vision-only estimation remains limited for axial rotations such as elbow and wrist yaw under occlusions — a limitation that the multi-camera triangulation approach in MotionBridge is specifically designed to mitigate by providing redundant viewpoints.
+ 
+Moya-Alcover et al. \cite{moya2023} presented seven motion capture datasets of professional industrial gestures performed by skilled craftsmen and factory operators, recorded using wearable inertial sensors. Their work is motivated by the same industrial and labour application domain described in MotionBridge — capturing arm motion for tasks involving factory work and load-carrying — but relies on instrumented suits rather than vision-based capture, introducing hardware constraints that the proposed camera-based system avoids entirely.
+ 
+\section{Existing Systems and Limitations}
+ 
+A comparative analysis of the reviewed works reveals consistent gaps across three dimensions: hardware cost, depth resolution method, and system completeness. Table~\ref{tab:comparison} summarises the key attributes of existing systems against the proposed MotionBridge system.
+ 
+\begin{table}[h!]
+\centering
+\caption{Comparison of Related Works with Proposed System}
+\label{tab:comparison}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{3.2cm} p{1.5cm} p{2.2cm} p{2cm} p{2cm} p{2.5cm}}
+\toprule
+\textbf{Work} & \textbf{Year} & \textbf{Camera Setup} & \textbf{Depth Method} & \textbf{Simulation} & \textbf{Primary Goal} \\
+\midrule
+Liang et al. & 2024 & Monocular & Transformer & PyBullet & DRL Training \\
+Jiang et al. & 2025 & Single RGB-D & Hardware & Real Robot & Robot Control \\
+Faria et al. & 2025 & Single RGB-D & Hardware & Real Robot & Teleoperation \\
+Sarkar et al. & 2022 & Multi RGB & Homogeneous & None & HRC Safety \\
+Bragagnolo et al. & 2024 & Multi RGB & Multi-view Fusion & None & Pose Accuracy \\
+Bultmann \& Behnke & 2021 & Multi (edge) & Triangulation & None & Real-time 3D \\
+Moya-Alcover et al. & 2023 & IMU-based & Inertial & None & Dataset \\
+Zell et al. & 2024 & Virtual Multi & Triangulation & None & Dataset \\
+\midrule
+\textbf{MotionBridge} & \textbf{2025} & \textbf{Multi RGB} & \textbf{Conf.-Weighted Tri.} & \textbf{PyBullet} & \textbf{Simulation + Dataset} \\
+\bottomrule
+\end{tabular}
+\end{table}
+ 
+Systems that achieve real-time arm replication (Jiang et al., Faria et al.) depend on hardware depth sensors costing \$300 or more. Systems using standard cameras and triangulation (Sarkar et al., Zell et al., Bultmann and Behnke) omit the simulation replication stage entirely. The only system using PyBullet for arm motion replication (Liang et al.) operates offline on monocular input and produces no structured dataset. No reviewed work captures finger-level joint data alongside arm joints from standard RGB cameras. MotionBridge uniquely combines all four capabilities — multi-camera RGB capture, real-time pose estimation, confidence-weighted triangulation, PyBullet simulation replication, and full arm-to-fingertip dataset generation — in a single low-cost pipeline.
