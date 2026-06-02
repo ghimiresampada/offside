@@ -1,39 +1,25 @@
 \chapter{REQUIREMENTS}
 \label{chap:requirements}
 
-The development of a distributed, tile-based \gls{hpd} system requires a multi level analysis of hardware constraints, software dependencies, and network reliability. The section below discusses the basic requirements needed for the project to be feasible.
 \section{Hardware Requirements}
-Given the ESP32-S3 chip in the design, the choice of hardware is based on the speed up and power consumption needs realted to \gls{ai}.
 
-\begin{itemize}
-    \item \textbf{Camera Module:} A high-resolution camera module(OV2640) capable of capturing images at higher resolution than traditional image processing systems, which will then be partitioned.
-    \item \textbf{Input Node:} A master node responsible for taking images from the image sensor; partitioning them into multiple tiles and distributing them to edge nodes.
-    \item \textbf{Edge Computing Nodes:} Multiple ESP32-S3 \glspl{mcu} are required. These must support the $Xtensa® LX7$ vector instructions to handle the tile-level \gls{cnn} inference.
-    \item \textbf{Aggregator Node:} A  simple ESP32 responsible for collecting feature vectors and executing the final classification layer.
-    \item \textbf{Communication Interface:} A low-latency communication system for inter-node communication \glspl{espnow}.
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{USB Webcams $\times$ 3:} Standard 1080p USB webcams (e.g., Logitech C270 or equivalent), positioned at front, left, and right angles around the capture area. Minimum 30~fps required for real-time operation.
+    \item \textbf{Camera Mounts / Tripods $\times$ 3:} Fixed mounting hardware to ensure stable, calibrated camera positions during capture sessions.
+    \item \textbf{Checkerboard Calibration Target:} Printed A4 checkerboard pattern (9$\times$6 inner corners) for OpenCV camera calibration.
+    \item \textbf{Laptop / Desktop PC:} Minimum Intel Core i5 (8th generation or above), 8~GB RAM. No GPU required MediaPipe and PyBullet both run on CPU for this pipeline.
+    \item \textbf{USB Hub (optional):} If the host machine has insufficient USB ports for three simultaneous camera connections.
 \end{itemize}
 
-\section{Software \& Framework Requirements}
-To achieve ultra-low bit quantization and distributed processing, the following software stack is required:
+\section{Software Requirements}
 
-\begin{itemize}
-    \item \textbf{Development Environment:} Arduino IDE using C/C++.
-    
-    \item \textbf{AI Inference Library:} The \gls{esp-dl} makes use of effiecient kernels for quantization 8-bit or 16-bit computation.
-
-    \item \textbf{Model Optimization:} Initial training and conversion of models with \gls{tfml} are followed by \gls{qat}.
-    
-    \item \textbf{Tiling Logic:} A custom C++ pre-processing module to handle spatial partitioning and memory-safe buffer management for individual tiles.
-\end{itemize}
-
-
-\section{Non-functional Requirements}
-\begin{itemize}
-    \item \textbf{Latency:} There will be low latency in order for this to be a real time application.
-    
-    \item \textbf{Scalability:} This would require an adjustable number of nodes, depending on the
-level of resolution and required \gls{fps}.
-    
-    \item \textbf{Robustness:} If one of the nodes is no longer working, it will need to fall back to the other nodes
-to get partial occupancy information.
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{Programming Language:} Python 3.9 or above.
+    \item \textbf{Pose Estimation:} MediaPipe 0.10+ (\texttt{mediapipe} Python package) - for real-time arm and hand landmark detection.
+    \item \textbf{Computer Vision:} OpenCV 4.8+ (\texttt{opencv-python}) - for camera capture, calibration, and triangulation.
+    \item \textbf{Physics Simulation:} PyBullet (\texttt{pybullet}) - for IK computation and real-time arm simulation rendering.
+    \item \textbf{Numerical Computing:} NumPy (\texttt{numpy}) - for matrix operations in triangulation and IK.
+    \item \textbf{Data Storage:} Python \texttt{csv} module or Pandas (\texttt{pandas}) - for structured dataset writing.
+    \item \textbf{Development Environment:} Visual Studio Code on Windows 10/11 or Ubuntu 22.04.
+    \item \textbf{Version Control:} Git / GitHub - for source code management.
 \end{itemize}

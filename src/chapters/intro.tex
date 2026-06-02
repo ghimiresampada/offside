@@ -3,7 +3,7 @@
 \section{Background}
 The ability to capture, interpret, and replicate human motion has long been a fundamental challenge in robotics, computer vision, and human-computer interaction. Traditional motion capture systems rely on expensive marker-based setups, wearable inertial measurement units (IMUs), or specialized depth sensors such as the Microsoft Kinect and Intel RealSense, all of which impose significant hardware constraints and deployment costs. Recent advances in deep learning-based pose estimation, particularly lightweight frameworks such as MediaPipe developed by Google, have enabled accurate real-time extraction of human joint coordinates from standard RGB video without specialized hardware.
  
-Simultaneously, physics-based simulation platforms such as PyBullet have matured into robust environments for replicating articulated body motion, providing physically accurate rendering of joint movement and a foundation for generating structured motion datasets. The convergence of these two technologies — vision-based pose estimation and physics-based simulation — presents an opportunity to build affordable, accessible motion capture systems that require only standard cameras.
+Simultaneously, physics-based simulation platforms such as PyBullet have matured into robust environments for replicating articulated body motion, providing physically accurate rendering of joint movement and a foundation for generating structured motion datasets. The convergence of these two technologies vision-based pose estimation and physics-based simulation presents an opportunity to build affordable, accessible motion capture systems that require only standard cameras.
  
 In the context of industrial robotics and assistive automation, large-scale datasets of human arm movement are essential for training robotic manipulators to perform tasks mimicking natural human motion. However, the cost and complexity of existing data collection pipelines remain a barrier to widespread dataset generation. A vision-based, multi-camera system capable of capturing full arm-to-fingertip motion in real-time and replicating it in simulation addresses this barrier directly.
 
@@ -17,9 +17,13 @@ Furthermore, no existing reviewed work captures both full arm joint trajectories
 \section{Problem Statement}
 Existing human arm motion capture systems for robotic dataset generation suffer from one or more of the following limitations: reliance on expensive depth-sensing hardware, dependence on wearable sensors, absence of real-time simulation replication, operation on monocular camera inputs that cannot resolve depth accurately, or omission of finger-level joint data. These constraints prevent scalable and affordable motion dataset generation for robotic arm training.
  
-This project addresses the problem of building a low-cost, real-time system that captures three-dimensional human arm and finger joint motion using only standard RGB cameras, replicates the captured motion in a physics-based simulation environment, and produces a structured dataset of joint coordinates and angles for downstream robotic arm training — without requiring specialized depth sensors, wearable hardware, or GPU-accelerated inference. 
+This project addresses the problem of building a low-cost, real-time system that captures three-dimensional human arm and finger joint motion using only standard RGB cameras, replicates the captured motion in a physics-based simulation environment, and produces a structured dataset of joint coordinates and angles for downstream robotic arm training without requiring specialized depth sensors, wearable hardware, or GPU-accelerated inference. 
 
 \section{Objectives}
+\begin{itemize}
+    \item To implement a vision-only system that extracts real-time 2D arm and hand landmarks from three standard RGB webcams and fuses them into 3D world coordinates via confidence-weighted triangulation.
+    \item To map reconstructed 3D joint trajectories onto a simulated PyBullet robotic arm using Inverse Kinematics while simultaneously exporting a structured CSV dataset for robotic training.
+\end{itemize}
 
 
 

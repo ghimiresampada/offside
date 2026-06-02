@@ -7,7 +7,7 @@ Sarkar et al. \cite{sarkar2022} implemented a multi-camera system for close-prox
  
 Zell et al. \cite{zell2024} presented a multimodal human motion dataset containing 51,051 poses from 71 persons, obtained by extracting 2D keypoints using MediaPipe Human Pose Landmarker from virtual multi-camera images and computing corresponding 3D keypoints by linear triangulation. Their dataset was explicitly intended for transforming computer vision pose solutions into biomechanical simulations, constituting a direct proof of concept for the MediaPipe-plus-triangulation pipeline proposed in MotionBridge.
  
-Bultmann and Behnke \cite{bultmann2021} proposed a distributed multi-camera architecture where 2D joint detection is performed locally at each smart edge sensor and only the semantic skeleton representation is transmitted to a central backend for 3D triangulation. Their system achieves real-time 3D pose estimation while significantly reducing network bandwidth, and incorporates prior human skeleton knowledge into the triangulation backend to improve robustness — an architectural approach directly relevant to the distributed and real-time requirements of the proposed system.
+Bultmann and Behnke \cite{bultmann2021} proposed a distributed multi-camera architecture where 2D joint detection is performed locally at each smart edge sensor and only the semantic skeleton representation is transmitted to a central backend for 3D triangulation. Their system achieves real-time 3D pose estimation while significantly reducing network bandwidth, and incorporates prior human skeleton knowledge into the triangulation backend to improve robustness an architectural approach directly relevant to the distributed and real-time requirements of the proposed system.
  
 Bragagnolo et al. \cite{bragagnolo2024} addressed the known limitation of standard triangulation under occlusion by performing multi-view fusion on 3D skeletons from monocular methods rather than fusing noisy 2D features, applying reprojection error optimization with limb-length symmetry constraints. Their method significantly outperformed standard triangulation in human-robot collaboration scenarios with heavy occlusion, identifying a clear accuracy upgrade path for the proposed system beyond its baseline triangulation implementation.
  
@@ -17,9 +17,9 @@ Liang et al. \cite{liang2024} proposed the most directly related simulation-base
  
 Jiang et al. \cite{jiang2025} demonstrated real-time multi-person arm motion imitation using a single RGB-D camera and an improved retargeting algorithm, achieving consistent arm configuration and precise end-effector tracking for multi-robot collaboration tasks. While their system confirms that real-time arm motion replication is feasible, it relies on expensive RGB-D hardware for depth acquisition, whereas MotionBridge targets equivalent real-time performance using only standard RGB cameras with computational triangulation, substantially lowering the deployment cost.
  
-Faria et al. \cite{faria2025} presented a teleoperation framework combining MediaPipe landmark detection with an Intel RealSense RGB-D camera for 3D joint reconstruction, mapping the results to a robot arm's kinematic constraints in real-time. Their work explicitly noted that vision-only estimation remains limited for axial rotations such as elbow and wrist yaw under occlusions — a limitation that the multi-camera triangulation approach in MotionBridge is specifically designed to mitigate by providing redundant viewpoints.
+Faria et al. \cite{faria2025} presented a teleoperation framework combining MediaPipe landmark detection with an Intel RealSense RGB-D camera for 3D joint reconstruction, mapping the results to a robot arm's kinematic constraints in real-time. Their work explicitly noted that vision-only estimation remains limited for axial rotations such as elbow and wrist yaw under occlusions a limitation that the multi-camera triangulation approach in MotionBridge is specifically designed to mitigate by providing redundant viewpoints.
  
-Moya-Alcover et al. \cite{moya2023} presented seven motion capture datasets of professional industrial gestures performed by skilled craftsmen and factory operators, recorded using wearable inertial sensors. Their work is motivated by the same industrial and labour application domain described in MotionBridge — capturing arm motion for tasks involving factory work and load-carrying — but relies on instrumented suits rather than vision-based capture, introducing hardware constraints that the proposed camera-based system avoids entirely.
+Moya-Alcover et al. \cite{moya2023} presented seven motion capture datasets of professional industrial gestures performed by skilled craftsmen and factory operators, recorded using wearable inertial sensors. Their work is motivated by the same industrial and labour application domain described in MotionBridge capturing arm motion for tasks involving factory work and load-carrying but relies on instrumented suits rather than vision-based capture, introducing hardware constraints that the proposed camera-based system avoids entirely.
  
 \section{Existing Systems and Limitations}
  
@@ -29,23 +29,27 @@ A comparative analysis of the reviewed works reveals consistent gaps across thre
 \centering
 \caption{Comparison of Related Works with Proposed System}
 \label{tab:comparison}
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{p{3.2cm} p{1.5cm} p{2.2cm} p{2cm} p{2cm} p{2.5cm}}
+\renewcommand{\arraystretch}{1.4} % Gives vertical breathing room between rows
+\setlength{\tabcolsep}{6pt}       % Forces a strict horizontal gap between all columns
+\small
+
+% Allocating dynamic wrapping (X) explicitly to both Depth Method and Primary Goal columns
+\begin{tabularx}{\textwidth}{l c l X l X}
 \toprule
 \textbf{Work} & \textbf{Year} & \textbf{Camera Setup} & \textbf{Depth Method} & \textbf{Simulation} & \textbf{Primary Goal} \\
 \midrule
-Liang et al. & 2024 & Monocular & Transformer & PyBullet & DRL Training \\
-Jiang et al. & 2025 & Single RGB-D & Hardware & Real Robot & Robot Control \\
-Faria et al. & 2025 & Single RGB-D & Hardware & Real Robot & Teleoperation \\
-Sarkar et al. & 2022 & Multi RGB & Homogeneous & None & HRC Safety \\
-Bragagnolo et al. & 2024 & Multi RGB & Multi-view Fusion & None & Pose Accuracy \\
-Bultmann \& Behnke & 2021 & Multi (edge) & Triangulation & None & Real-time 3D \\
-Moya-Alcover et al. & 2023 & IMU-based & Inertial & None & Dataset \\
-Zell et al. & 2024 & Virtual Multi & Triangulation & None & Dataset \\
+Liang et al.       & 2024 & Monocular     & Transformer        & PyBullet   & DRL Training \\ \addlinespace[3pt]
+Jiang et al.       & 2025 & Single RGB-D  & Hardware           & Real Robot & Robot Control \\ \addlinespace[3pt]
+Faria et al.       & 2025 & Single RGB-D  & Hardware           & Real Robot & Teleoperation \\ \addlinespace[3pt]
+Sarkar et al.      & 2022 & Multi RGB     & Homogeneous        & None       & HRC Safety \\ \addlinespace[3pt]
+Bragagnolo et al.  & 2024 & Multi RGB     & Multi-view Fusion  & None       & Pose Accuracy \\ \addlinespace[3pt]
+Bultmann \& Behnke & 2021 & Multi (edge)  & Triangulation      & None       & Real-time 3D \\ \addlinespace[3pt]
+Moya-Alcover et al.& 2023 & IMU-based     & Inertial           & None       & Dataset \\ \addlinespace[3pt]
+Zell et al.        & 2024 & Virtual Multi & Triangulation      & None       & Dataset \\ 
 \midrule
-\textbf{MotionBridge} & \textbf{2025} & \textbf{Multi RGB} & \textbf{Conf.-Weighted Tri.} & \textbf{PyBullet} & \textbf{Simulation + Dataset} \\
+\textbf{MotionBridge} & \textbf{2025} & \textbf{Multi RGB} & \textbf{Conf.-Weighted Tri.} & \textbf{ PyBullet} & \textbf{Simulation + Dataset} \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
  
-Systems that achieve real-time arm replication (Jiang et al., Faria et al.) depend on hardware depth sensors costing \$300 or more. Systems using standard cameras and triangulation (Sarkar et al., Zell et al., Bultmann and Behnke) omit the simulation replication stage entirely. The only system using PyBullet for arm motion replication (Liang et al.) operates offline on monocular input and produces no structured dataset. No reviewed work captures finger-level joint data alongside arm joints from standard RGB cameras. MotionBridge uniquely combines all four capabilities — multi-camera RGB capture, real-time pose estimation, confidence-weighted triangulation, PyBullet simulation replication, and full arm-to-fingertip dataset generation — in a single low-cost pipeline.
+Systems that achieve real-time arm replication (Jiang et al., Faria et al.) depend on hardware depth sensors costing \$300 or more. Systems using standard cameras and triangulation (Sarkar et al., Zell et al., Bultmann and Behnke) omit the simulation replication stage entirely. The only system using PyBullet for arm motion replication (Liang et al.) operates offline on monocular input and produces no structured dataset. No reviewed work captures finger-level joint data alongside arm joints from standard RGB cameras. MotionBridge uniquely combines all four capabilities multi-camera RGB capture, real-time pose estimation, confidence-weighted triangulation, PyBullet simulation replication, and full arm-to-fingertip dataset generation in a single low-cost pipeline.
