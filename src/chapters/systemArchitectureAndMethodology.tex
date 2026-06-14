@@ -1,91 +1,139 @@
 \chapter{PROPOSED SYSTEM/ METHODOLOGY}
 \section{System Overview}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, backgrounds}
+The MotionBridge framework is designed as a modular, hardware-agnostic software pipeline that translates real-time multi-view human upper limb movements directly into physical simulation joint trajectories, automating behavioral cloning dataset factory operations. The structural design isolates computer vision feature extraction from physical joint simulation and downstream time-series machine learning policies. The high-level static distribution of components, interfaces, and boundary layers across the three primary execution phases of the framework is illustrated in Figure \ref{fig:block_diagram}.
 
-MotionBridge is a four-stage real-time pipeline. In the first stage, three USB webcams positioned at front, left, and right angles simultaneously capture video of a human subject performing arm movements. In the second stage, MediaPipe Pose and MediaPipe Hands run independently on each camera feed to extract 2D joint keypoints including shoulder, elbow, wrist, and 21 finger landmarks along with per-joint visibility confidence scores. In the third stage, the 2D detections from all three cameras are fused through confidence-weighted triangulation using calibrated projection matrices to produce 3D joint coordinates in metric world space. In the fourth stage, the reconstructed 3D wrist position is fed into PyBullet's Inverse Kinematics solver, which computes the corresponding joint angles for a simulated arm model and updates the simulation every frame. The resulting 3D coordinates and joint angles are simultaneously written to a CSV dataset file.
-
-\section*{Block Diagram / Flowchart}
-
-\begin{figure}[h!]
-\centering
-\begin{tikzpicture}[
-    node distance=1.2cm,
-    block/.style={rectangle, draw, text width=4.5cm, align=center, rounded corners, minimum height=1cm, font=\small},
-    input/.style={rectangle, draw, text width=2.5cm, align=center, minimum height=0.8cm, font=\small},
-    output/.style={rectangle, draw, text width=3.5cm, align=center, minimum height=1cm, font=\small},
-    arrow/.style={thick,->,>=stealth}
-]
-
-% Input Nodes (Side-by-side at the top)
-\node (cam2) [input] {Camera 2\\(Left)};
-\node (cam1) [input, left=0.5cm of cam2] {Camera 1\\(Front)};
-\node (cam3) [input, right=0.5cm of cam2] {Camera 3\\(Right)};
-
-% Processing Nodes (Stacked vertically)
-\node (mediapipe) [block, below=1.2cm of cam2] {MediaPipe\\Pose \& Hands};
-\node (triangulation) [block, below=of mediapipe] {Confidence-Weighted Triangulation};
-\node (pybullet) [block, below=of triangulation] {PyBullet IK Solver};
-
-% Output Nodes (Side-by-side at the bottom)
-\node (sim) [output, below left=1.2cm and 0.2cm of pybullet.south] {Real-Time Simulation};
-\node (csv) [output, below right=1.2cm and 0.2cm of pybullet.south] {Structured CSV Dataset};
-
-% Drawing Arrows from Inputs to MediaPipe
-\draw [arrow] (cam1.south) -- ++(0,-0.4) -| (mediapipe.north);
-\draw [arrow] (cam2.south) -- (mediapipe.north);
-\draw [arrow] (cam3.south) -- ++(0,-0.4) -| (mediapipe.north);
-
-% Drawing Arrows between Processing Blocks
-\draw [arrow] (mediapipe.south) -- (triangulation.north);
-\draw [arrow] (triangulation.south) -- (pybullet.north);
-
-% Drawing Arrows from IK Solver to Outputs
-\draw [arrow] (pybullet.south) -- ++(0,-0.4) -| (sim.north);
-\draw [arrow] (pybullet.south) -- ++(0,-0.4) -| (csv.north);
-
-\end{tikzpicture}
-\caption{MotionBridge Real-Time Distributed Software Pipeline}
-\label{fig:pipeline_vertical}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{src/images/block.drawio.png}
+    \caption{Block diagram of the MotionBridge framework.}
+    \label{fig:block_diagram}
 \end{figure}
 
-\section{Algorithms and Working Principle}
+\subsection{Phase I: Multi-View Spatial Data Acquisition \& Fusion}
 
-\subsection{Camera Calibration}
-
-Prior to operation, each camera is calibrated using OpenCV's checkerboard calibration procedure to obtain the intrinsic matrix $\mathbf{K}$ (focal lengths, principal point, distortion coefficients) and extrinsic parameters $[\mathbf{R} | \mathbf{t}]$ (rotation and translation relative to the world coordinate frame). The projection matrix for each camera $i$ is computed as:
-
+\subsubsection{Geometric Camera Calibration}
+To eliminate lens distortion artifacts and define structural world space mapping variables, three consumer-grade RGB 1080p webcams are fixed on rigid tripods encircling the operator workspace. Geometric evaluation relies on OpenCV’s checkerboard target matrix configuration ($9 \times 6$ internal corners). The algorithm computes the individual camera intrinsic parameter matrix $K_i$ and the camera extrinsic spatial orientation matrix $[R_i|t_i]$, defining a permanent structural projection matrix $P_i$ per camera view $i$:
 \begin{equation}
-    \mathbf{P}_i = \mathbf{K}_i \cdot [\mathbf{R}_i | \mathbf{t}_i]
+P_i = K_i \cdot [R_i|t_i] \quad \text{where } i \in \{1, 2, 3\}
 \end{equation}
 
-\subsection{MediaPipe Pose and Hand Estimation}
-
-For each video frame from camera $i$, MediaPipe Pose returns a set of 33 body landmarks and MediaPipe Hands returns 21 hand landmarks, each with associated 2D pixel coordinates $(u, v)$ and a visibility confidence score $c \in [0, 1]$. The arm joints of interest are: shoulder, elbow, wrist, and all 21 finger keypoints.
-
-\subsection{Confidence-Weighted Triangulation}
-
-Standard linear triangulation computes the 3D position $\mathbf{X}$ of a joint from its 2D observations across $N$ calibrated cameras by solving a linear system $\mathbf{A}\mathbf{X} = 0$ via Singular Value Decomposition (SVD). The proposed system extends this with confidence weighting, scaling each camera's contribution by its MediaPipe visibility score:
-
+\subsubsection{Multi-Threaded Frame Synchronization}
+Asynchronous USB bus clock jitters create temporal variations across video streams, compromising spatial triangulation. To mitigate this issue, individual camera captures are isolated onto separate thread loops managed via a central thread queue. Incoming frames are assigned system arrival timestamps ($t_{\text{cam}}$); a matching mechanism drops unaligned frame pairs, enforcing temporal consistency across views if and only if:
 \begin{equation}
-    \mathbf{X}_{3D} = \frac{\sum_{i=1}^{N} c_i \cdot f(\mathbf{P}_i, \mathbf{x}_i)}{\sum_{i=1}^{N} c_i}
+\Delta t = |t_{\text{cam},i} - t_{\text{cam},j}| < 15\,\text{ms} \quad \forall \,\, i,j \in \{1, 2, 3\}
 \end{equation}
 
-where $c_i$ is the confidence score from camera $i$, $\mathbf{P}_i$ is its projection matrix, and $\mathbf{x}_i = (u_i, v_i)$ is the observed 2D joint location. This reduces the influence of cameras where a joint is occluded or detected with low confidence, improving reconstruction accuracy without additional hardware.
+\subsubsection{Parallel Multi-Model Keypoint Extraction}
+Synchronized frames are concurrently transmitted to localized, independent instances of Google MediaPipe libraries. The frame processing loop targets parallel data extraction tasks:
+\begin{enumerate}
+    \item \textbf{MediaPipe Pose Landmarker:} Extracts structural coordinates defining large-scale body vectors, focusing on the shoulder, elbow, and wrist nodes.
+    \item \textbf{MediaPipe Hands Mesh Model:} Tracks dense regional features by mapping 21 localized tracking landmarks per hand to monitor intricate gesturing profiles.
+\end{enumerate}
+This combined parsing generates a continuous stream of two-dimensional pixel arrays $x_i = (u_i, v_i)$ paired with an associated, dynamic visibility validation metric $c_i \in [0, 1]$.
 
-\subsection{Inverse Kinematics in PyBullet}
-
-The reconstructed 3D wrist position $\mathbf{X}_{wrist}$ is passed as the target end-effector position to PyBullet's built-in Damped Least Squares IK solver:
+\subsubsection{Confidence-Weighted Triangulation Calculus}
+Standard linear triangulation using Singular Value Decomposition ($AX = 0$) breaks down under severe occlusion conditions common to single-user movement. MotionBridge counteracts viewpoint dropouts by adjusting the projection matrix influence dynamically using MediaPipe's live visibility score ($c_i$). This calculation weights down occluded views, computing accurate 3D metric world coordinates ($X_{\text{3D}}$):
 \begin{equation}
-    \boldsymbol{\theta} = \texttt{pybullet.calculateInverseKinematics}(\text{arm}, \text{endEffector}, \mathbf{X}_{wrist})
+X_{\text{3D}} = \frac{\sum_{i=1}^{3} c_i \cdot f(P_i, x_i)}{\sum_{i=1}^{3} c_i}
 \end{equation}
 
-The resulting joint angle vector $\boldsymbol{\theta}$ is applied to the simulated arm model each frame via \texttt{pybullet.setJointMotorControl2}, producing a live visual replication of the human arm movement.
-
-\subsection{Dataset Generation}
-
-Each processed frame produces one record written to a CSV file:
-
+\subsection{Phase II: Simulation Mapping, Kinematic Processing, \& Automated Dataset Generation}
+\subsubsection{Vector Proportional Retargeting}
+Because human bone proportions vary significantly from robot dimensions, raw metric world values ($X_{\text{3D}}$) cannot be directly mapped to joint targets. To address this, human tracking segments are evaluated as directional spatial vectors:
 \begin{equation}
-    \text{Record} = \{t,\ \mathbf{X}_{sh},\ \mathbf{X}_{el},\ \mathbf{X}_{wr},\ \mathbf{X}_{f_1},\ \ldots,\ \mathbf{X}_{f_{21}},\ \boldsymbol{\theta}\}
+\vec{V}_{\text{segment}} = X_{\text{3D, child}} - X_{\text{3D, parent}}
+\end{equation}
+These vectors are proportionally normalized and scaled according to the mechanical link lengths specified within the robot URDF asset file, preventing joint hyper-extension and structural calculation drift.
+
+\subsubsection{Articulated Kinematic Setup within PyBullet}
+The simulation environment is built inside the PyBullet physics engine utilizing the Kuka IIWA URDF manipulator model. This environment provides physically accurate rendering of joint movements and maps the mathematical spatial features to a standardized robotic configuration.
+
+\subsubsection{Damped Least Squares Inverse Kinematics}
+To map target positions to joint rotations without encountering mathematical divisions by zero near arm workspace boundaries (singularities), PyBullet's internal solver is configured to evaluate joint states via a Damped Least Squares (DLS) optimization algorithm:
+\begin{equation}
+\theta = \text{pybullet.calculateInverseKinematics}(\text{bodyId}, \text{jointId}, X_{\text{wrist}})
+\end{equation}
+The calculated joint configuration array $\theta$ updates the virtual robot model at a consistent execution rate via motor position control commands.
+
+\subsubsection{Automated Data Factory Serialization}
+While maintaining live display rendering, the system operates as an automated data logging factory. The processing loop writes synchronized parameters directly to a structured CSV format trajectory file. Each line records the spatial features and target joint angles for that frame:
+\begin{equation}
+\text{Record} = \{t, X_{\text{shoulder}}, X_{\text{elbow}}, X_{\text{wrist}}, X_{\text{fingers}}, \theta\}
 \end{equation}
 
-where $t$ is the timestamp, $\mathbf{X}_{sh}$, $\mathbf{X}_{el}$, $\mathbf{X}_{wr}$ are the 3D shoulder, elbow, and wrist coordinates, $\mathbf{X}_{f_k}$ are the 21 finger joint coordinates, and $\boldsymbol{\theta}$ is the simulated joint angle vector.
+\subsection{Phase III: Downstream Behavioral Cloning Policy (The AI Network)}
+
+\subsubsection{Temporal Sliding Window Reshaping}
+To train the machine learning framework to capture structural motion characteristics rather than static positions, the stored CSV logs are prepared for training using a sliding window strategy. Rows are reshaped into sequential arrays spanning 10 consecutive frames:
+\begin{equation}
+\mathcal{S}_t = [\text{Record}_{t-9}, \text{Record}_{t-8}, \dots, \text{Record}_t]
+\end{equation}
+This temporal structure allows the network to learn higher-order motion parameters, such as velocity and trajectory acceleration vectors.
+
+\subsubsection{LSTM-MLP Architecture and Policy Optimization}
+The prediction model is built in PyTorch using a sequential architecture:
+\begin{itemize}
+    \item \textbf{LSTM Layer Block:} Processes time-series state sequences ($\mathcal{S}_t$) to model historical trajectory paths and movement dynamics.
+    \item \textbf{MLP Target Head:} Takes the final hidden state vector from the LSTM and passes it through fully connected layers to predict the complete array of target motor angles ($\theta_{\text{predicted}}$).
+\end{itemize}
+The policy weights are optimized by minimizing Mean Squared Error (MSE) loss relative to the analytical DLS outputs collected during Phase II:
+\begin{equation}
+\mathcal{L}_{\text{MSE}} = \frac{1}{N} \sum_{j=1}^{N} (\theta_{\text{predicted}, j} - \theta_{\text{analytical}, j})^2
+\end{equation}
+
+\subsection{Deployment Framework: The Autonomous Control Loop}
+Once network optimization converges, the analytical Damped Least Squares Inverse Kinematics solver is decoupled and disabled. The live runtime script switches to an autonomous, forward-pass inference model. Raw webcam data passes through localized 2D extraction and triangulation math, routing directly into the trained LSTM-MLP policy engine to output joint angles ($\theta$) instantly. This eliminates the need for iterative matrix calculus, reducing system overhead and sustaining real-time processing speeds of 25–30 FPS on consumer CPUs. The step-by-step runtime pipeline execution path is illustrated in Figure \ref{fig:flowchart}.
+
+% \begin{figure}[hbt!]
+% \centering
+% \begin{tikzpicture}[
+%     node distance=1.8cm,
+%     startstop/.style={rectangle, rounded corners, minimum width=4cm, minimum height=0.8cm, text centered, draw=black, fill=blue!10, font=\bfseries, align=center},
+%     process/.style={rectangle, minimum width=4cm, minimum height=0.8cm, text centered, draw=black, fill=orange!10, font=\small, align=center},
+%     io/.style={trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3.5cm, minimum height=0.8cm, text centered, draw=black, fill=green!10, font=\small, align=center},
+%     arrow/.style={thick,->,>=stealth, line width=1.1pt}
+% ]
+
+% % FLOWCHART NODES
+% \node (webcams) [startstop] {3x 1080p RGB Webcams};
+% \node (mp) [process, below of=webcams] {Parallel MediaPipe Instances};
+% \node (tri) [process, below of=mp] {Confidence-Weighted Triangulation};
+% \node (retarget) [process, below of=tri] {Vector Proportional Retargeting};
+% \node (pybullet) [startstop, below of=retarget] {PyBullet Engine (Kuka IIWA URDF)};
+% \node (ik) [process, below of=pybullet] {Analytical DLS IK Solver};
+
+% \node (sim) [process, below of=ik, xshift=-2.5cm, yshift=-0.2cm] {Real-Time Simulation};
+% \node (csv) [io, below of=ik, xshift=2.5cm, yshift=-0.2cm] {CSV Dataset Generation};
+
+% \node (window) [process, below of=csv, xshift=-2.5cm, yshift=-1.5cm] {Sliding Window Reshaping};
+% \node (lstm) [process, below of=window] {LSTM Network Layers};
+% \node (mlp) [process, below of=lstm] {MLP Prediction Head};
+% \node (robot) [startstop, below of=mlp] {Autonomous Robot Control ($\theta$)};
+
+% % CHRONOLOGICAL EDGES
+% \draw [arrow] (webcams) -- (mp);
+% \draw [arrow] (mp) -- (tri);
+% \draw [arrow] (tri) -- (retarget);
+% \draw [arrow] (retarget) -- (pybullet);
+% \draw [arrow] (pybullet) -- (ik);
+
+% \draw [arrow] (ik) -- ++(-2.5,0) -- (sim);
+% \draw [arrow] (ik) -- ++(2.5,0) -- (csv);
+
+% \draw [arrow] (csv) -- ++(0,-1.5) -- (window);
+% \draw [arrow] (window) -- (lstm);
+% \draw [arrow] (lstm) -- (mlp);
+% \draw [arrow] (mlp) -- (robot);
+
+% \end{tikzpicture}
+% \caption{Procedural Flowchart outlining the runtime sequence of software logic execution from initial frame acquisition to dataset training and control output.}
+% \label{fig:flowchart}
+% \end{figure}
+% \newpage
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{src/images/motionbridge.png}
+    \caption{Procedural Flowchart outlining the runtime sequence of software logic execution from initial frame acquisition to dataset training and control output.}
+    \label{fig:flowchart}
+\end{figure}
