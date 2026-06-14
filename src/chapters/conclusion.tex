@@ -61,7 +61,7 @@ operation. Three approaches are worth exploring. First, model compression throug
 structured pruning of the \gls{lbcnn} backbone could reduce the number of channels at
 each layer, directly shrinking the arena requirement to fit within internal \gls{sram}
 and eliminating the PSRAM latency penalty. Second, replacing the \gls{lbcnn} backbone
-with a MobileNetV3(Small) or EfficientNet(Lite) variant optimised specifically for TFLite
+with a MobileNetV3(Small) or EfficientNet (Lite) variant optimised specifically for TFLite
 Micro could achieve comparable feature extraction with a significantly smaller memory
 footprint. Third, the ESP32-S3's dual core architecture could be exploited more
 aggressively by pipelining fragment reassembly on Core~1 while inference runs on Core~0,
