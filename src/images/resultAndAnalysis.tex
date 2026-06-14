@@ -1,6 +1,8 @@
 
 \chapter{Expected Results and Evaluation Metrics}
-\section{Expected Results}
+\section{Expected Results and Evaluation Metrics}
+
+\subsection{Expected Results}
 
 The proposed MotionBridge system is expected to provide a low-cost and real-time framework for human arm motion capture, simulation replication, and robotic dataset generation using only standard RGB cameras and open-source software tools. By integrating MediaPipe-based landmark detection, multi-camera triangulation, and PyBullet simulation, the system is expected to generate accurate three-dimensional representations of human arm and hand motion without requiring specialized depth sensors or wearable devices.
 
@@ -10,15 +12,15 @@ Simultaneously, the system is expected to generate a structured dataset containi
 
 Furthermore, the multi-camera architecture is expected to improve robustness against partial occlusions by utilizing redundant viewpoints, thereby maintaining reliable landmark reconstruction even when one camera view is temporarily obstructed. The complete pipeline is expected to operate on standard CPU-based hardware while maintaining near real-time performance.
 
-\section{Evaluation Metrics}
+\subsection{Evaluation Metrics}
 
 The performance of the proposed system will be evaluated using quantitative and qualitative metrics that assess landmark detection quality, three-dimensional reconstruction accuracy, real-time performance, simulation responsiveness, dataset quality, and robustness to occlusions.
 
-\subsection{Landmark Detection Performance}
+\subsubsection{Landmark Detection Performance}
 
 The effectiveness of MediaPipe Pose and MediaPipe Hands in detecting arm and hand landmarks will be evaluated using standard classification metrics based on correctly and incorrectly detected landmarks.
 
-\paragraph{1. Precision}
+\paragraph{Precision}
 
 Precision measures the proportion of detected landmarks that are correctly identified.
 
@@ -32,7 +34,7 @@ where:
     \item FP = False Positives
 \end{itemize}
 
-\paragraph{2. Recall}
+\paragraph{Recall}
 
 Recall measures the proportion of actual landmarks that are successfully detected.
 
@@ -45,7 +47,7 @@ where:
     \item FN = False Negatives
 \end{itemize}
 
-\paragraph{3. F1-Score}
+\paragraph{F1-Score}
 
 The F1-score provides a balanced measure of precision and recall.
 
@@ -55,7 +57,7 @@ F1 = 2 \times \frac{Precision \times Recall}{Precision + Recall}
 
 Higher precision, recall, and F1-score values indicate better landmark detection performance.
 
-\subsection{Three-Dimensional Reconstruction Accuracy}
+\subsubsection{Three-Dimensional Reconstruction Accuracy}
 
 The accuracy of the reconstructed 3D joint coordinates will be evaluated by comparing reconstructed positions with known reference measurements or predefined calibration poses.
 
@@ -74,7 +76,7 @@ where:
 
 Lower reconstruction error indicates better triangulation accuracy and more reliable 3D motion capture.
 
-\subsection{Real-Time Processing Performance}
+\subsubsection{Real-Time Processing Performance}
 
 The computational efficiency of the proposed system will be evaluated using the following metrics:
 
@@ -92,7 +94,7 @@ FPS = \frac{\text{Total Processed Frames}}{\text{Total Execution Time}}
 
 The system is expected to maintain near real-time operation while processing multiple camera streams simultaneously.
 
-\subsection{Simulation Replication Latency}
+\subsubsection{Simulation Replication Latency}
 
 The responsiveness of the robotic arm simulation will be measured by calculating the delay between human motion capture and corresponding robotic arm movement within PyBullet.
 
@@ -110,7 +112,7 @@ where:
 
 Lower latency values indicate better real-time motion replication performance.
 
-\subsection{Dataset Completeness}
+\subsubsection{Dataset Completeness}
 
 The quality and reliability of the generated dataset will be evaluated by measuring the percentage of frames containing valid joint information.
 
@@ -122,7 +124,7 @@ Completeness = \frac{\text{Valid Frames}}{\text{Total Frames}} \times 100
 
 A higher completeness percentage indicates successful landmark tracking and dataset generation throughout the recording session.
 
-\subsection{Occlusion Robustness}
+\subsubsection{Occlusion Robustness}
 
 To evaluate the robustness of the proposed multi-camera framework, controlled occlusion experiments will be performed by partially blocking one or more camera views.
 
@@ -137,7 +139,7 @@ The following factors will be analyzed:
 
 The multi-camera configuration is expected to reduce tracking failures and improve reconstruction reliability compared to monocular camera systems.
 
-\subsection{Overall System Evaluation}
+\subsubsection{Overall System Evaluation}
 
 The overall effectiveness of MotionBridge will be assessed by combining the above metrics to determine whether the system can provide accurate, real-time human arm motion capture and robotic dataset generation using only low-cost RGB cameras and standard computing hardware.
 

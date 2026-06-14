@@ -1,8 +1,6 @@
 \chapter{PROPOSED SYSTEM/ METHODOLOGY}
 \section{System Overview}
-\usetikzlibrary{shapes.geometric, arrows, positioning, fit, backgrounds}
-The MotionBridge framework is designed as a modular, hardware-agnostic software pipeline that translates real-time multi-view human upper limb movements directly into physical simulation joint trajectories, automating behavioral cloning dataset factory operations. The structural design isolates computer vision feature extraction from physical joint simulation and downstream time-series machine learning policies. The high-level static distribution of components, interfaces, and boundary layers across the three primary execution phases of the framework is illustrated in Figure \ref{fig:block_diagram}.
-
+The MotionBridge framework is designed as a modular, hardware-agnostic software pipeline that translates real-time multi-view human upper limb movements directly into physical simulation joint trajectories, automating behavioral cloning dataset factory operations. The structural design isolates computer vision feature extraction in Phase I from physical joint simulation and serialization loops in Phase II. This analytical execution pipeline bypasses heavy iterative matrix math during runtime to achieve real-time performance, continuously serializing the resulting mathematically predicted joint angles and tracking coordinates. The distribution of components, interfaces, and boundary layers across the primary execution phases of the framework is illustrated in Figure \ref{fig:block_diagram}.
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{src/images/block.drawio.png}
@@ -50,7 +48,7 @@ These vectors are proportionally normalized and scaled according to the mechanic
 The simulation environment is built inside the PyBullet physics engine utilizing the Kuka IIWA URDF manipulator model. This environment provides physically accurate rendering of joint movements and maps the mathematical spatial features to a standardized robotic configuration.
 
 \subsubsection{Damped Least Squares Inverse Kinematics}
-To map target positions to joint rotations without encountering mathematical divisions by zero near arm workspace boundaries (singularities), PyBullet's internal solver is configured to evaluate joint states via a Damped Least Squares (DLS) optimization algorithm:
+To map target positions to joint rotations without encountering mathematical divisions by zero near arm workspace boundaries (singularities), PyBullet's internal solver is configured to evaluate joint states via a \gls{dls} optimization algorithm:
 \begin{equation}
 \theta = \text{pybullet.calculateInverseKinematics}(\text{bodyId}, \text{jointId}, X_{\text{wrist}})
 \end{equation}
@@ -62,28 +60,7 @@ While maintaining live display rendering, the system operates as an automated da
 \text{Record} = \{t, X_{\text{shoulder}}, X_{\text{elbow}}, X_{\text{wrist}}, X_{\text{fingers}}, \theta\}
 \end{equation}
 
-\subsection{Phase III: Downstream Behavioral Cloning Policy (The AI Network)}
-
-\subsubsection{Temporal Sliding Window Reshaping}
-To train the machine learning framework to capture structural motion characteristics rather than static positions, the stored CSV logs are prepared for training using a sliding window strategy. Rows are reshaped into sequential arrays spanning 10 consecutive frames:
-\begin{equation}
-\mathcal{S}_t = [\text{Record}_{t-9}, \text{Record}_{t-8}, \dots, \text{Record}_t]
-\end{equation}
-This temporal structure allows the network to learn higher-order motion parameters, such as velocity and trajectory acceleration vectors.
-
-\subsubsection{LSTM-MLP Architecture and Policy Optimization}
-The prediction model is built in PyTorch using a sequential architecture:
-\begin{itemize}
-    \item \textbf{LSTM Layer Block:} Processes time-series state sequences ($\mathcal{S}_t$) to model historical trajectory paths and movement dynamics.
-    \item \textbf{MLP Target Head:} Takes the final hidden state vector from the LSTM and passes it through fully connected layers to predict the complete array of target motor angles ($\theta_{\text{predicted}}$).
-\end{itemize}
-The policy weights are optimized by minimizing Mean Squared Error (MSE) loss relative to the analytical DLS outputs collected during Phase II:
-\begin{equation}
-\mathcal{L}_{\text{MSE}} = \frac{1}{N} \sum_{j=1}^{N} (\theta_{\text{predicted}, j} - \theta_{\text{analytical}, j})^2
-\end{equation}
-
-\subsection{Deployment Framework: The Autonomous Control Loop}
-Once network optimization converges, the analytical Damped Least Squares Inverse Kinematics solver is decoupled and disabled. The live runtime script switches to an autonomous, forward-pass inference model. Raw webcam data passes through localized 2D extraction and triangulation math, routing directly into the trained LSTM-MLP policy engine to output joint angles ($\theta$) instantly. This eliminates the need for iterative matrix calculus, reducing system overhead and sustaining real-time processing speeds of 25–30 FPS on consumer CPUs. The step-by-step runtime pipeline execution path is illustrated in Figure \ref{fig:flowchart}.
+The step-by-step runtime pipeline execution path is illustrated in Figure \ref{fig:flowchart}.
 
 % \begin{figure}[hbt!]
 % \centering
@@ -133,7 +110,35 @@ Once network optimization converges, the analytical Damped Least Squares Inverse
 % \newpage
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1\textwidth]{src/images/motionbridge.png}
-    \caption{Procedural Flowchart outlining the runtime sequence of software logic execution from initial frame acquisition to dataset training and control output.}
+    \includegraphics[width=1\textwidth]{src/images/motionbridge (1).png}
+    \caption{Procedural Flowchart outlining the runtime sequence.}
     \label{fig:flowchart}
 \end{figure}
+
+\section{System Robustness \& Future Work: Algorithmic Noise Mitigation}
+
+\subsubsection{The Problem of Mathematical Trajectory Discontinuity}
+A prominent challenge within this pure computer vision triangulation setup is coordinate discontinuity across frames. Even with multi-view redundancy, sudden body self-occlusion or spatial feature flickering causes quick spikes in calculated 3D targets ($X_{\text{3D}}$). Because standard analytical Inverse Kinematics (IK) evaluates frames independently, these small position jumps propagate directly into the output joint configurations ($\theta$). This causes high-frequency mechanical jitter in simulation, which corrupts the dataset for smooth imitation learning.
+
+To address these spatial jumps and build a curated, highly precise tracking resource, future iterations of this framework will investigate two distinct smoothing blocks implemented after the spatial triangulation step:
+
+\subsubsection{Proposed Extension A: Analytical Temporal Filtering (One Euro Filter)}
+To resolve tracking noise directly during runtime without adding significant CPU latency, we propose integrating an analytical adaptive low-pass filter, specifically a **One Euro Filter**. Unlike standard Butterworth filters that cause lag, or a traditional Kalman Filter that demands complex physical state tracking, the One Euro Filter dynamically adjusts its filtering cutoff frequency based on target velocity:
+\begin{equation}
+\alpha = \frac{1}{1 + \frac{\tau}{\Delta t}} \quad \text{where} \quad \tau = \frac{1}{2\pi \cdot (f_{\text{min}} + \beta \cdot | \dot{X}_{\text{3D}} |)}
+\end{equation}
+When target movement speed is low, the filter lowers the cutoff frequency to smooth out high-frequency sensor noise. When velocity ($|\dot{X}_{\text{3D}}|$) increases, it automatically scales up the cutoff to reduce lag, ensuring responsive tracking during quick movements.
+
+\subsubsection{Proposed Extension B: Deep Sequential Data Curation (LSTM Network)}
+For post-processing data curation or advanced prediction, we propose implementing a recurrent machine learning architecture based on **Long Short-Term Memory (LSTM)** neural networks. 
+
+Instead of treating frames as isolated events, an LSTM processes a moving sequence window of historical frames to learn continuous velocity patterns. This allows it to reconstruct coordinates when a joint is completely blocked from view. The proposed deep behavioral policy uses a sequential structure:
+\begin{itemize}
+    \item \textbf{LSTM Layer Block:} Processes a sequence window of past frames to track movement direction and velocity trends.
+    \item \textbf{MLP Projection Head:} Maps the processed temporal states to output clean, stable target joint angles ($\theta$), removing noise from the dataset.
+\end{itemize}
+This network will be trained by minimizing a Mean Squared Error (MSE) loss function augmented with a temporal smoothness penalty:
+\begin{equation}
+\mathcal{L} = \frac{1}{N} \sum_{j=1}^{N} (\theta_{\text{predicted}, j} - \theta_{\text{analytical}, j})^2 + \gamma \sum_{j=2}^{N} (\theta_{\text{predicted}, j} - \theta_{\text{predicted}, j-1})^2
+\end{equation}
+Here, $\gamma$ is a regularization factor that penalizes sudden changes between consecutive steps, ensuring smooth, highly curated data sequences for training actual robotic systems.
