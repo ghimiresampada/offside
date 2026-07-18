@@ -16,6 +16,8 @@ To eliminate lens distortion artifacts and define structural world space mapping
 P_i = K_i \cdot [R_i|t_i] \quad \text{where } i \in \{1, 2, 3\}
 \end{equation}
 
+
+
 \subsubsection{Multi-Threaded Frame Synchronization}
 Asynchronous USB bus clock jitters create temporal variations across video streams, compromising spatial triangulation. To mitigate this issue, individual camera captures are isolated onto separate thread loops managed via a central thread queue. Incoming frames are assigned system arrival timestamps ($t_{\text{cam}}$); a matching mechanism drops unaligned frame pairs, enforcing temporal consistency across views if and only if:
 \begin{equation}
@@ -25,8 +27,20 @@ Asynchronous USB bus clock jitters create temporal variations across video strea
 \subsubsection{Parallel Multi-Model Keypoint Extraction}
 Synchronized frames are concurrently transmitted to localized, independent instances of Google MediaPipe libraries. The frame processing loop targets parallel data extraction tasks:
 \begin{enumerate}
-    \item \textbf{MediaPipe Pose Landmarker:} Extracts structural coordinates defining large-scale body vectors, focusing on the shoulder, elbow, and wrist nodes.
-    \item \textbf{MediaPipe Hands Mesh Model:} Tracks dense regional features by mapping 21 localized tracking landmarks per hand to monitor intricate gesturing profiles.
+    \item \textbf{MediaPipe Pose:} The pipeline detects a person region-of-interest (ROI) once using a lightweight detector, after which a tracker network predicts all 33 body keypoints from the cropped ROI for every subsequent frame, deriving the next ROI from the previous frame's landmarks rather than re-running detection. The tracker's convolutional backbone feeds two branches: a heatmap-and-offset encoder–decoder branch used only during training for supervision, and a lightweight joint-regression branch used at inference. Figure 4-4 illustrates this tracker architecture, adapted from the original BlazePose paper. MotionBridge uses only the inference-time regression branch output, restricted to the shoulder, elbow, and wrist landmarks.
+    \begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{src/images/mediapipe pose.png}
+    \caption{Architectural diagram of Mediapipe Pose.}
+    \label{fig:MediaPipe Pose architecture}
+\end{figure}
+    \item \textbf{MediaPipe Hands Mesh Model:} BlazePalm, a single-shot detector using an encoder–decoder feature extractor, localizes the palm bounding box; the Hand Landmark Model then regresses 21 three-dimensional hand-knuckle coordinates, a handedness (left/right) classification, and a presence/confidence score directly from the cropped palm region. As with Pose, the detector runs only on the first frame or after tracking loss, with subsequent frames reusing the previous crop. Figure 4-5 illustrates this architecture, adapted from the original MediaPipe Hands paper.
+    \begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{src/images/mediapipe hand.png}
+    \caption{Architectural diagram of Mideapipe Hands.}
+    \label{fig:MediaPipe Hands architecture}
+\end{figure}
 \end{enumerate}
 This combined parsing generates a continuous stream of two-dimensional pixel arrays $x_i = (u_i, v_i)$ paired with an associated, dynamic visibility validation metric $c_i \in [0, 1]$.
 
@@ -34,6 +48,7 @@ This combined parsing generates a continuous stream of two-dimensional pixel arr
 Standard linear triangulation using Singular Value Decomposition ($AX = 0$) breaks down under severe occlusion conditions common to single-user movement. MotionBridge counteracts viewpoint dropouts by adjusting the projection matrix influence dynamically using MediaPipe's live visibility score ($c_i$). This calculation weights down occluded views, computing accurate 3D metric world coordinates ($X_{\text{3D}}$):
 \begin{equation}
 X_{\text{3D}} = \frac{\sum_{i=1}^{3} c_i \cdot f(P_i, x_i)}{\sum_{i=1}^{3} c_i}
+\label{eq:4-3}
 \end{equation}
 
 \subsection{Phase II: Simulation Mapping, Kinematic Processing, \& Automated Dataset Generation}
@@ -41,6 +56,7 @@ X_{\text{3D}} = \frac{\sum_{i=1}^{3} c_i \cdot f(P_i, x_i)}{\sum_{i=1}^{3} c_i}
 Because human bone proportions vary significantly from robot dimensions, raw metric world values ($X_{\text{3D}}$) cannot be directly mapped to joint targets. To address this, human tracking segments are evaluated as directional spatial vectors:
 \begin{equation}
 \vec{V}_{\text{segment}} = X_{\text{3D, child}} - X_{\text{3D, parent}}
+\label{eq:4-4}
 \end{equation}
 These vectors are proportionally normalized and scaled according to the mechanical link lengths specified within the robot URDF asset file, preventing joint hyper-extension and structural calculation drift.
 
@@ -51,6 +67,7 @@ The simulation environment is built inside the PyBullet physics engine utilizing
 To map target positions to joint rotations without encountering mathematical divisions by zero near arm workspace boundaries (singularities), PyBullet's internal solver is configured to evaluate joint states via a \gls{dls} optimization algorithm:
 \begin{equation}
 \theta = \text{pybullet.calculateInverseKinematics}(\text{bodyId}, \text{jointId}, X_{\text{wrist}})
+\label{eq:4-5}
 \end{equation}
 The calculated joint configuration array $\theta$ updates the virtual robot model at a consistent execution rate via motor position control commands.
 
@@ -58,6 +75,7 @@ The calculated joint configuration array $\theta$ updates the virtual robot mode
 While maintaining live display rendering, the system operates as an automated data logging factory. The processing loop writes synchronized parameters directly to a structured CSV format trajectory file. Each line records the spatial features and target joint angles for that frame:
 \begin{equation}
 \text{Record} = \{t, X_{\text{shoulder}}, X_{\text{elbow}}, X_{\text{wrist}}, X_{\text{fingers}}, \theta\}
+\label{eq:4-6}
 \end{equation}
 
 The step-by-step runtime pipeline execution path is illustrated in Figure \ref{fig:flowchart}.
