@@ -115,7 +115,7 @@ The step-by-step runtime pipeline execution path is illustrated in Figure \ref{f
     \label{fig:flowchart}
 \end{figure}
 
-\section{System Robustness \& Future Work: Algorithmic Noise Mitigation}
+\section{System Robustness: Algorithmic Noise Mitigation}
 
 \subsubsection{The Problem of Mathematical Trajectory Discontinuity}
 A prominent challenge within this pure computer vision triangulation setup is coordinate discontinuity across frames. Even with multi-view redundancy, sudden body self-occlusion or spatial feature flickering causes quick spikes in calculated 3D targets ($X_{\text{3D}}$). Because standard analytical Inverse Kinematics (IK) evaluates frames independently, these small position jumps propagate directly into the output joint configurations ($\theta$). This causes high-frequency mechanical jitter in simulation, which corrupts the dataset for smooth imitation learning.
