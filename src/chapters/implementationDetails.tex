@@ -1,6 +1,186 @@
-\chapter{IMPLEMENTATION DETAILS}
-Note: This begining of this chapter should be mid-point of your entire rport content. 
-The implementation detials and result part should approximately be 50-60\% of total content.
-Describe how design was translated to working system with sufficient detail for replication.
-Some relevant sections might be given below. You can heavilty customize based on your project type. 
+\chapter{Implementation Details}
 
+\section{Hardware Setup}
+
+The implemented system uses the following hardware, matching the
+requirements specified in the proposal (Section 3.1):
+
+\begin{itemize}
+    \item \textbf{Cameras:} 3 $\times$ USB webcams, configured at
+    \textbf{1920$\times$1080 (1080p)} resolution, positioned at front, left,
+    and right angles around the capture workspace.
+    \item \textbf{Calibration target:} Printed A4 checkerboard pattern with
+    9$\times$6 internal corners, square size 25\,mm, used for both intrinsic
+    and extrinsic camera calibration.
+    \item \textbf{Host machine:} \textit{[Fill in: processor model, RAM,
+    OS]}. No GPU is required — both MediaPipe inference and PyBullet
+    simulation run entirely on CPU, as specified in the proposal.
+\end{itemize}
+
+\section{Software Stack}
+
+\begin{itemize}
+    \item Python 3.9+
+    \item OpenCV (\texttt{opencv-python}) — camera capture, checkerboard
+    calibration, triangulation geometry
+    \item MediaPipe — real-time Pose and Hands landmark detection
+    \item PyBullet — physics simulation and inverse kinematics
+    \item NumPy — matrix operations
+    \item Pandas / \texttt{csv} — structured dataset export
+\end{itemize}
+
+The codebase is organized as one Python module per functional block of the
+system architecture (Figure~4-1 in the proposal), summarized in
+Table~\ref{tab:module-map}.
+
+\begin{table}[h]
+\centering
+\caption{Mapping of implemented modules to system architecture blocks}
+\label{tab:module-map}
+\begin{tabular}{ll}
+\hline
+\textbf{Module} & \textbf{Architecture block} \\
+\hline
+\texttt{capture.py} & Multi-Camera Capture, Sync Queue \\
+\texttt{calibration.py} & Geometric Camera Calibration \\
+\texttt{pose\_extraction.py} & Parallel MediaPipe Inference Engine \\
+\texttt{triangulation.py} & Confidence-Weighted Triangulation Block \\
+\texttt{one\_euro\_filter.py} & Temporal smoothing (noise mitigation) \\
+\texttt{retargeting.py} & Vector Proportional Retargeting Model \\
+\texttt{simulation.py} & PyBullet Simulation Environment, IK Solver \\
+\texttt{data\_logger.py} & Automated Data Factory Serialization \\
+\texttt{main.py} & Full runtime pipeline integration \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Phase I: Multi-View Spatial Data Acquisition and Fusion}
+
+\subsection{Multi-Threaded Synchronized Capture}
+
+Each of the 3 cameras is driven by its own capture thread
+(\texttt{CameraStream} in \texttt{capture.py}), since
+\texttt{cv2.VideoCapture.read()} is a blocking call — reading all three
+cameras sequentially on a single thread would introduce cumulative latency
+between views, undermining the temporal alignment triangulation depends on.
+Each thread continuously overwrites a shared "latest frame" slot with its
+own capture timestamp. A consumer class, \texttt{SyncedFrameGrabber}, pulls
+the latest frame from all three slots and accepts the set only if every
+pairwise timestamp gap is below the tolerance defined in Eq.~4-2 of the
+proposal (15\,ms); otherwise the frame set is discarded and re-attempted on
+the next loop iteration.
+
+\subsection{Geometric Camera Calibration}
+
+Camera calibration (Eq.~4-1: $P_i = K_i \cdot [R_i \mid t_i]$) was split
+into two independently runnable stages, rather than one combined session:
+
+\begin{enumerate}
+    \item \textbf{Intrinsic calibration} (\texttt{calibrate\_step1\_%
+    intrinsics.py}): each camera is calibrated in isolation using
+    \texttt{cv2.calibrateCamera()}, with the checkerboard shown across that
+    camera's entire frame (near/far, tilted, into all four corners) to
+    accurately constrain the lens distortion coefficients.
+    \item \textbf{Extrinsic calibration} (\texttt{calibrate\_step2\_%
+    extrinsics.py}): with intrinsics from Step 1 held fixed
+    (\texttt{cv2.CALIB\_FIX\_INTRINSIC}), \texttt{cv2.stereoCalibrate()} is
+    used on checkerboard views captured simultaneously across all three
+    cameras to solve for each camera's rotation and translation $[R_i \mid
+    t_i]$ relative to the front camera, which is defined as the world
+    origin.
+\end{enumerate}
+
+Splitting the two stages allows intrinsic calibration to use the camera's
+full field of view (rather than being restricted to the small region
+visible to all three cameras simultaneously), improving distortion-model
+accuracy, and allows extrinsic-only re-calibration if a camera is later
+physically repositioned without needing to redo intrinsic calibration.
+
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=0.7\textwidth]{figures/camera_rig_calibration.jpg}
+% \caption{Physical 3-camera rig during extrinsic calibration, checkerboard
+% held in the shared overlap zone visible to all three cameras.}
+% \label{fig:camera-rig}
+% \end{figure}
+
+\subsection{Parallel Keypoint Extraction}
+
+Each camera has its own independent \texttt{PoseExtractor} instance
+(\texttt{pose\_extraction.py}), wrapping one MediaPipe Pose model and one
+MediaPipe Hands model. For every synchronized frame set, each camera's
+frame is processed independently to extract:
+
+\begin{itemize}
+    \item Shoulder, elbow, and wrist 2D pixel coordinates with an
+    associated visibility confidence, from MediaPipe Pose.
+    \item 21 hand landmark points with an associated detection confidence,
+    from MediaPipe Hands (only the configured active hand side is kept).
+\end{itemize}
+
+This produces, per camera, the 2D array of $(u, v, c)$ observations shown
+in the architecture diagram, which is passed to Phase II.
+
+\section{Phase II: Simulation Mapping and Automated Dataset Generation}
+
+\subsection{Confidence-Weighted Triangulation}
+
+Implemented in \texttt{triangulation.py} as a weighted Direct Linear
+Transform (DLT). For each camera $i$ with projection matrix $P_i$ and
+observed pixel $(u_i, v_i, c_i)$, the epipolar constraint gives two linear
+equations in the unknown homogeneous 3D point $X$. Views below a minimum
+confidence threshold are excluded entirely; the remaining views' equations
+are scaled by their confidence $c_i$ before the stacked system is solved
+via Singular Value Decomposition. This realizes Eq.~4-3 of the proposal —
+occluded or low-confidence views contribute little to the final estimate
+without requiring an explicit branch for "missing" cameras, since a
+confidence of zero removes a view's influence naturally.
+
+\subsection{Temporal Smoothing}
+
+An adaptive One Euro Filter (\texttt{one\_euro\_filter.py}, Eq.~4-7) is
+applied to each triangulated 3D joint independently, after triangulation
+and before retargeting. This was a deliberate placement choice: filtering
+raw 2D pixel observations first would blur genuine fast motion within a
+single view before multi-camera redundancy could help; filtering the
+already-fused 3D point is where residual triangulation jitter actually
+needs to be removed.
+
+\subsection{Vector Proportional Retargeting}
+
+Implemented in \texttt{retargeting.py} (Eq.~4-4). Human upper-arm and
+forearm segments are expressed as direction vectors
+($V_{\text{segment}} = X_{3D,\text{child}} - X_{3D,\text{parent}}$),
+normalized, and re-scaled to the robot's known, fixed link lengths before
+being chained from a fixed robot base position. This prevents the
+differing bone-to-link proportions between the human operator and the
+Kuka IIWA manipulator from causing joint hyper-extension.
+
+\subsection{PyBullet Simulation and Inverse Kinematics}
+
+\texttt{simulation.py} loads the Kuka IIWA URDF model into a PyBullet
+physics world and solves for joint angles using
+\texttt{pybullet.calculateInverseKinematics()} (Eq.~4-5) with joint
+damping applied, corresponding to the Damped Least Squares approach
+specified in the proposal to avoid instability near workspace
+singularities. The simulation can run either with a live GUI window
+(visual replication) or headlessly (\texttt{p.DIRECT}) for
+dataset-generation-only runs.
+
+\subsection{Automated Dataset Serialization}
+
+\texttt{data\_logger.py} writes one CSV row per processed frame, following
+the record schema of Eq.~4-6: timestamp, 3D shoulder/elbow/wrist
+coordinates, JSON-encoded finger landmarks, and the JSON-encoded solved
+joint angle vector $\theta$. Every frame is logged regardless of whether
+IK could be solved that frame, so gaps in tracking are preserved in the
+dataset rather than silently dropped.
+
+\section{System Integration}
+
+\texttt{main.py} wires all of the above into the runtime loop shown in
+Figure~4-2 of the proposal: synchronized capture $\rightarrow$ parallel
+MediaPipe extraction $\rightarrow$ confidence-weighted triangulation
+$\rightarrow$ temporal smoothing $\rightarrow$ vector-proportional
+retargeting $\rightarrow$ PyBullet IK solve $\rightarrow$ simultaneous
+console output and CSV logging.
