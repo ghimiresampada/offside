@@ -1,4 +1,119 @@
 \chapter{REMAINING TASKS}
 
-\noindent\textbf{CHAPTER GUIDE:} Purpose: describe unfinished work, risks, and a realistic plan. Must include: What is completed vs pending, Remaining milestones, Risks/blockers + mitigation. LaTeX: Use itemize for checklists; enumerate for ordered milestones.
+\section{Current Project Status}
 
+At the present stage, the foundational components of the MotionBridge 
+system have been implemented. Multi-camera calibration using OpenCV 
+has been completed, and confidence-weighted triangulation is operational. 
+A preliminary inverse kinematics mapping to the Kuka IIWA model in 
+PyBullet has also been established, enabling basic arm motion replication.
+
+However, the system remains in a prototype phase. Dataset stabilization, 
+filter optimization, structured evaluation, and learning-based refinement 
+have not yet been fully implemented or validated.
+
+\section{Completed vs Pending Work}
+
+\subsection*{Completed Components}
+
+\begin{itemize}
+    \item Multi-camera geometric calibration using OpenCV
+    \item Extraction of pose and hand landmarks via MediaPipe
+    \item Confidence-weighted triangulation of 3D joint coordinates
+    \item Basic vector retargeting to Kuka IIWA URDF model
+    \item Preliminary DLS-based inverse kinematics implementation
+    \item Real-time PyBullet visualization of mapped motion
+    \item Initial CSV-based dataset logging
+\end{itemize}
+
+\subsection*{Partially Completed Components}
+
+\begin{itemize}
+    \item Integration of One Euro Filter into pipeline (not yet tuned or benchmarked)
+    \item Basic dataset capture sessions (limited motion diversity)
+    \item Preliminary latency testing (not formally measured)
+\end{itemize}
+
+\subsection*{Pending Components}
+
+\begin{itemize}
+    \item Systematic tuning of One Euro filter parameters
+    \item Quantitative stabilization analysis (RMSE, variance, acceleration)
+    \item Structured dataset stabilization and validation
+    \item Full implementation and training of stacked LSTM refinement model
+    \item Comparative evaluation between raw, filtered, and refined trajectories
+    \item Final documentation of experimental results
+\end{itemize}
+
+\section{Remaining Milestones}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\textwidth]{src/images/PhaseIII.png}
+    \caption{System block Diagram Phase III}
+    \label{phaseIII}
+\end{figure}
+
+\begin{enumerate}
+    \item \textbf{Filter Optimization and Validation}  
+          Perform parameter sweep on $f_{\text{min}}$ and $\beta$ and evaluate 
+          trajectory smoothness using quantitative metrics.
+    
+    \item \textbf{Structured Dataset Collection}  
+          Capture a diverse set of motion sequences for stabilization analysis 
+          and LSTM training.
+    
+    \item \textbf{Trajectory Stability Evaluation}  
+          Measure jitter, variance, and acceleration before and after filtering.
+    
+    \item \textbf{LSTM Model Training and Testing}  
+          Implement stacked LSTM refinement and validate performance on 
+          held-out sequences.
+    
+    \item \textbf{Comparative Benchmarking and Reporting}  
+          Produce tables, graphs, and discussion comparing system performance 
+          across all refinement stages.
+\end{enumerate}
+
+\section{Risks and Mitigation Strategies}
+
+\subsection*{Risk 1: Insufficient Dataset Stabilization}
+
+Current dataset capture lacks systematic evaluation of jitter and 
+trajectory consistency.
+
+\textbf{Mitigation:}  
+Define objective metrics (RMSE, coordinate variance, maximum acceleration) 
+and conduct controlled evaluation experiments.
+
+\subsection*{Risk 2: One Euro Filter Parameter Sensitivity}
+
+Improper parameter selection may lead to over-smoothing or residual jitter.
+
+\textbf{Mitigation:}  
+Conduct structured parameter tuning and document results empirically.
+
+\subsection*{Risk 3: LSTM Training Ineffectiveness}
+
+The LSTM refinement stage may not significantly outperform the analytical filter.
+
+\textbf{Mitigation:}  
+Use simplified architecture, regularization, and sufficient motion diversity 
+to improve generalization performance.
+
+\subsection*{Risk 4: Timeline Compression}
+
+Remaining tasks involve experimentation and benchmarking, which may require 
+additional iteration time.
+
+\textbf{Mitigation:}  
+Prioritize filter validation and dataset stabilization first, ensuring 
+a stable analytical baseline before implementing learning-based refinement.
+
+\section{Overall Assessment}
+
+The project has successfully established its structural foundation, including 
+calibration, triangulation, and preliminary robotic simulation. The remaining 
+work focuses primarily on stabilization, evaluation, and refinement rather 
+than architectural redesign. With systematic experimentation and parameter 
+optimization, the system can be matured into a fully validated motion capture 
+and dataset generation framework within the remaining timeline.
