@@ -1,5 +1,5 @@
-\chapter{PROPOSED SYSTEM/ METHODOLOGY}
-\section{System Overview}
+\chapter[Architecture and Methodology]{SYSTEM ARCHITECTURE AND METHODOLOGY}
+\section{System Architecture Overview}
 The MotionBridge framework is designed as a modular, hardware-agnostic software pipeline that translates real-time multi-view human upper limb movements directly into physical simulation joint trajectories, automating behavioral cloning dataset factory operations. The structural design isolates computer vision feature extraction in Phase I from physical joint simulation and serialization loops in Phase II. This analytical execution pipeline bypasses heavy iterative matrix math during runtime to achieve real-time performance, continuously serializing the resulting mathematically predicted joint angles and tracking coordinates. The distribution of components, interfaces, and boundary layers across the primary execution phases of the framework is illustrated in Figure \ref{fig:block_diagram}.
 \begin{figure}[H]
     \centering
@@ -132,31 +132,117 @@ The step-by-step runtime pipeline execution path is illustrated in Figure \ref{f
     \caption{Procedural Flowchart outlining the runtime sequence.}
     \label{fig:flowchart}
 \end{figure}
-
-\section{System Robustness \& Future Work: Algorithmic Noise Mitigation}
+\section{System Robustness: Sequential Noise Mitigation Pipeline}
 
 \subsubsection{The Problem of Mathematical Trajectory Discontinuity}
-A prominent challenge within this pure computer vision triangulation setup is coordinate discontinuity across frames. Even with multi-view redundancy, sudden body self-occlusion or spatial feature flickering causes quick spikes in calculated 3D targets ($X_{\text{3D}}$). Because standard analytical Inverse Kinematics (IK) evaluates frames independently, these small position jumps propagate directly into the output joint configurations ($\theta$). This causes high-frequency mechanical jitter in simulation, which corrupts the dataset for smooth imitation learning.
 
-To address these spatial jumps and build a curated, highly precise tracking resource, future iterations of this framework will investigate two distinct smoothing blocks implemented after the spatial triangulation step:
+A major challenge in vision-based multi-view triangulation systems is 
+\emph{coordinate discontinuity} across consecutive frames. Despite multi-camera 
+redundancy, temporary self-occlusion, landmark misdetection, or feature flickering 
+can introduce sudden spikes in reconstructed 3D coordinates ($X_{\text{3D}}$). 
+Since the analytical Inverse Kinematics (IK) solver evaluates each frame independently, 
+these discontinuities directly propagate into joint configurations ($\theta$), 
+resulting in high-frequency mechanical jitter in simulation. 
 
-\subsubsection{Proposed Extension A: Analytical Temporal Filtering (One Euro Filter)}
-To resolve tracking noise directly during runtime without adding significant CPU latency, we propose integrating an analytical adaptive low-pass filter, specifically a **One Euro Filter**. Unlike standard Butterworth filters that cause lag, or a traditional Kalman Filter that demands complex physical state tracking, the One Euro Filter dynamically adjusts its filtering cutoff frequency based on target velocity:
+Such instability negatively affects dataset quality and reduces suitability 
+for robotic imitation learning, where smooth and physically consistent motion 
+trajectories are essential.
+
+To mitigate this issue, we propose a sequential two-stage filtering architecture. 
+The first stage performs real-time analytical smoothing during capture. 
+The second stage applies a lightweight temporal learning model offline to 
+further refine trajectory consistency.
+
+\subsubsection{Stage 1: Real-Time Analytical Filtering (One Euro Filter)}
+
+To suppress high-frequency noise without introducing significant latency, 
+we integrate the adaptive \textbf{One Euro Filter} immediately after the 
+triangulation step.
+
+Unlike conventional low-pass filters with fixed cutoff frequencies, the 
+One Euro Filter dynamically adjusts its cutoff based on motion velocity, 
+allowing strong smoothing during slow movements and minimal lag during 
+rapid motion.
+
+The adaptive coefficient is computed as:
+
 \begin{equation}
-\alpha = \frac{1}{1 + \frac{\tau}{\Delta t}} \quad \text{where} \quad \tau = \frac{1}{2\pi \cdot (f_{\text{min}} + \beta \cdot | \dot{X}_{\text{3D}} |)}
+\alpha_t = \frac{1}{1 + \frac{\tau_t}{\Delta t}}, 
+\quad 
+\tau_t = \frac{1}{2\pi \cdot (f_{\text{min}} + \beta \cdot |\dot{X}_{\text{3D}}|)}
 \end{equation}
-When target movement speed is low, the filter lowers the cutoff frequency to smooth out high-frequency sensor noise. When velocity ($|\dot{X}_{\text{3D}}|$) increases, it automatically scales up the cutoff to reduce lag, ensuring responsive tracking during quick movements.
 
-\subsubsection{Proposed Extension B: Deep Sequential Data Curation (LSTM Network)}
-For post-processing data curation or advanced prediction, we propose implementing a recurrent machine learning architecture based on **Long Short-Term Memory (LSTM)** neural networks. 
+The filtered coordinate is then updated recursively as:
 
-Instead of treating frames as isolated events, an LSTM processes a moving sequence window of historical frames to learn continuous velocity patterns. This allows it to reconstruct coordinates when a joint is completely blocked from view. The proposed deep behavioral policy uses a sequential structure:
+\begin{equation}
+\hat{X}_{\text{3D}, t} = \alpha_t X_{\text{3D}, t} + (1 - \alpha_t)\hat{X}_{\text{3D}, t-1}
+\end{equation}
+
+where:
 \begin{itemize}
-    \item \textbf{LSTM Layer Block:} Processes a sequence window of past frames to track movement direction and velocity trends.
-    \item \textbf{MLP Projection Head:} Maps the processed temporal states to output clean, stable target joint angles ($\theta$), removing noise from the dataset.
+    \item $f_{\text{min}}$ is the minimum cutoff frequency,
+    \item $\beta$ controls velocity-based adaptation,
+    \item $\Delta t$ is the frame time interval,
+    \item $\dot{X}_{\text{3D}}$ is the estimated velocity.
 \end{itemize}
-This network will be trained by minimizing a Mean Squared Error (MSE) loss function augmented with a temporal smoothness penalty:
+
+The filter operates in constant time per frame and introduces approximately 
+0.1 ms latency per joint, making it suitable for real-time deployment. 
+It significantly reduces jitter while preserving responsiveness.
+
+\subsubsection{Stage 2: Offline Dataset Curation (Stacked LSTM Model)}
+
+After real-time capture, the One Euro-filtered dataset undergoes 
+offline refinement using a simple stacked LSTM network.
+
+The LSTM processes short temporal windows (10 frames) of historical 
+3D coordinates and learns motion continuity patterns. 
+Unlike the analytical filter, it leverages temporal context to 
+reduce residual noise and interpolate short occlusions.
+
+The model consists of:
+\begin{itemize}
+    \item A two-layer LSTM encoder (64 hidden units),
+    \item A small fully connected projection head for coordinate reconstruction.
+\end{itemize}
+
+Training minimizes a combined loss consisting of position error 
+and a temporal smoothness constraint:
+
 \begin{equation}
-\mathcal{L} = \frac{1}{N} \sum_{j=1}^{N} (\theta_{\text{predicted}, j} - \theta_{\text{analytical}, j})^2 + \gamma \sum_{j=2}^{N} (\theta_{\text{predicted}, j} - \theta_{\text{predicted}, j-1})^2
+\mathcal{L} =
+\frac{1}{N} \sum_{j=1}^{N} \|\hat{X}_j - X_j^{\text{ref}}\|^2
++
+\gamma \sum_{j=2}^{N} \|\hat{X}_j - \hat{X}_{j-1}\|^2
 \end{equation}
-Here, $\gamma$ is a regularization factor that penalizes sudden changes between consecutive steps, ensuring smooth, highly curated data sequences for training actual robotic systems.
+
+where $\gamma$ regulates the trade-off between reconstruction accuracy 
+and motion smoothness.
+
+The LSTM operates offline and does not affect live system latency. 
+Its purpose is to produce a higher-quality curated dataset for 
+robotic training and research applications.
+
+\subsubsection{Sequential Workflow}
+
+The system operates in two phases:
+
+\textbf{Phase 1 — Real-Time Capture:}  
+Camera input is processed through MediaPipe, triangulated into 3D coordinates, 
+smoothed using the One Euro Filter, and then mapped via IK into the PyBullet 
+simulation while simultaneously logging structured CSV data.
+
+\textbf{Phase 2 — Offline Refinement:}  
+The recorded dataset is post-processed using the trained LSTM model to 
+further enhance smoothness and interpolate minor discontinuities. 
+The resulting curated dataset is exported for imitation learning pipelines.
+
+\subsubsection{Advantages of the Sequential Architecture}
+
+\begin{itemize}
+    \item The real-time system remains lightweight and computationally efficient.
+    \item The analytical filter guarantees immediate stability without training requirements.
+    \item Offline learning-based refinement improves dataset quality without impacting live performance.
+    \item Each stage can be evaluated independently for ablation analysis.
+    \item The modular design allows future architectural upgrades without altering the real-time core.
+\end{itemize}

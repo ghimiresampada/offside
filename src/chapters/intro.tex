@@ -1,4 +1,4 @@
-\chapter{Introduction}
+\chapter[INTRODUCTION]{Introduction}
 
 \section{Background}
 The ability to capture, interpret, and replicate human motion has long been a fundamental challenge in robotics, computer vision, and human-computer interaction. Traditional motion capture systems rely on expensive marker-based setups, wearable \gls{imu}, or specialized depth sensors such as the Microsoft Kinect and Intel RealSense, all of which impose significant hardware constraints and deployment costs. Recent advances in deep learning-based pose estimation, particularly lightweight frameworks such as MediaPipe developed by Google, have enabled accurate real-time extraction of human joint coordinates from standard RGB video without specialized hardware.
@@ -21,8 +21,8 @@ This project addresses the problem of building a low-cost, real-time system that
 
 \section{Objectives}
 \begin{itemize}
-    \item To implement a vision-only system that extracts real-time 2D arm and hand landmarks from three standard RGB webcams and fuses them into 3D world coordinates via confidence-weighted triangulation.
-    \item To map reconstructed 3D joint trajectories onto a simulated PyBullet robotic arm using Inverse Kinematics while simultaneously exporting a structured CSV dataset for robotic training.
+    \item To reconstruct real-time 3D arm and hand trajectories from three RGB webcams using confidence-weighted triangulation.
+    \item To map the reconstructed trajectories onto a simulated robotic arm via Inverse Kinematics and export the motion as a structured CSV dataset.
 \end{itemize}
 
 
@@ -40,14 +40,9 @@ This project addresses the problem of building a low-cost, real-time system that
 
 \subsection{Limitations}
 \begin{itemize}
-    \item Finger joint movement is captured and recorded in the dataset but is not replicated in PyBullet simulation, as standard arm URDF models do not include articulated finger structures.
-    \item The system is limited to single-person capture; multi-person simultaneous tracking is outside scope.
-    \item Accuracy depends on initial camera calibration quality; dynamic camera repositioning requires recalibration.
-    \item The system does not include robot arm training or policy learning; it generates the dataset only.
-    \item Performance may degrade under extreme lighting conditions or significant self-occlusion not resolvable by three cameras.
-    \item The system does not support full-body motion capture only the arm from shoulder to fingertip.
+    \item The system captures only upper-limb motion (shoulder to fingertip) for a single person, and does not replicate finger articulation in PyBullet due to standard URDF limitations, nor support robot policy training beyond dataset generation.
+    \item Accuracy depends on proper camera calibration and may degrade under poor lighting, significant self-occlusion, or dynamic camera repositioning without recalibration.
 \end{itemize}
-
 
 \section{Problem Applcations}
 The dataset and simulation output produced by MotionBridge have direct applications in the following domains:
