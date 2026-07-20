@@ -1,4 +1,4 @@
-\chapter[Architecture and Methodology]{SYSTEM ARCHITECTURE AND METHODOLOGY}
+\chapter{SYSTEM ARCHITECTURE AND METHODOLOGY}
 \section{System Architecture Overview}
 The MotionBridge framework is designed as a modular, hardware-agnostic software pipeline that translates real-time multi-view human upper limb movements directly into physical simulation joint trajectories, automating behavioral cloning dataset factory operations. The structural design isolates computer vision feature extraction in Phase I from physical joint simulation and serialization loops in Phase II. This analytical execution pipeline bypasses heavy iterative matrix math during runtime to achieve real-time performance, continuously serializing the resulting mathematically predicted joint angles and tracking coordinates. The distribution of components, interfaces, and boundary layers across the primary execution phases of the framework is illustrated in Figure \ref{fig:block_diagram}.
 \begin{figure}[H]
@@ -30,15 +30,15 @@ Synchronized frames are concurrently transmitted to localized, independent insta
     \item \textbf{MediaPipe Pose:} The pipeline detects a person region-of-interest (ROI) once using a lightweight detector, after which a tracker network predicts all 33 body keypoints from the cropped ROI for every subsequent frame, deriving the next ROI from the previous frame's landmarks rather than re-running detection. The tracker's convolutional backbone feeds two branches: a heatmap-and-offset encoder–decoder branch used only during training for supervision, and a lightweight joint-regression branch used at inference. Figure 4-4 illustrates this tracker architecture, adapted from the original BlazePose paper. MotionBridge uses only the inference-time regression branch output, restricted to the shoulder, elbow, and wrist landmarks.
     \begin{figure}[H]
     \centering
-    \includegraphics[width=1\textwidth]{src/images/mediapipe pose.png}
-    \caption{Architectural diagram of Mediapipe Pose.}
+    \includegraphics[width=0.8\textwidth]{src/images/mediapipe pose.png}
+    \caption{Architectural Diagram of MediaPipe Pose.}
     \label{fig:MediaPipe Pose architecture}
 \end{figure}
     \item \textbf{MediaPipe Hands Mesh Model:} BlazePalm, a single-shot detector using an encoder–decoder feature extractor, localizes the palm bounding box; the Hand Landmark Model then regresses 21 three-dimensional hand-knuckle coordinates, a handedness (left/right) classification, and a presence/confidence score directly from the cropped palm region. As with Pose, the detector runs only on the first frame or after tracking loss, with subsequent frames reusing the previous crop. Figure 4-5 illustrates this architecture, adapted from the original MediaPipe Hands paper.
     \begin{figure}[H]
     \centering
-    \includegraphics[width=1\textwidth]{src/images/mediapipe hand.png}
-    \caption{Architectural diagram of Mideapipe Hands.}
+    \includegraphics[width=0.8\textwidth]{src/images/mediapipe hand.png}
+    \caption{Architectural Diagram of MediaPipe Hands.}
     \label{fig:MediaPipe Hands architecture}
 \end{figure}
 \end{enumerate}
@@ -77,6 +77,7 @@ While maintaining live display rendering, the system operates as an automated da
 \text{Record} = \{t, X_{\text{shoulder}}, X_{\text{elbow}}, X_{\text{wrist}}, X_{\text{fingers}}, \theta\}
 \label{eq:4-6}
 \end{equation}
+
 
 The step-by-step runtime pipeline execution path is illustrated in Figure \ref{fig:flowchart}.
 
@@ -227,12 +228,12 @@ robotic training and research applications.
 
 The system operates in two phases:
 
-\textbf{Phase 1 — Real-Time Capture:}  
+\textbf{Phase 1  Real-Time Capture:}  
 Camera input is processed through MediaPipe, triangulated into 3D coordinates, 
 smoothed using the One Euro Filter, and then mapped via IK into the PyBullet 
 simulation while simultaneously logging structured CSV data.
 
-\textbf{Phase 2 — Offline Refinement:}  
+\textbf{Phase 2  Offline Refinement:}  
 The recorded dataset is post-processed using the trained LSTM model to 
 further enhance smoothness and interpolate minor discontinuities. 
 The resulting curated dataset is exported for imitation learning pipelines.
@@ -246,3 +247,124 @@ The resulting curated dataset is exported for imitation learning pipelines.
     \item Each stage can be evaluated independently for ablation analysis.
     \item The modular design allows future architectural upgrades without altering the real-time core.
 \end{itemize}
+
+\section{Evaluation Metrics}
+
+The performance of the proposed system will be evaluated using quantitative and qualitative metrics that assess landmark detection quality, three-dimensional reconstruction accuracy, real-time performance, simulation responsiveness, dataset quality, and robustness to occlusions.
+
+\subsection{Landmark Detection Precision, Recall, and F1-Score}
+
+On review, these metrics primarily characterize the pretrained MediaPipe Pose/Hands backbone itself, rather
+than the system components developed in this project  the
+confidence-weighted multi-camera triangulation, vector-proportional
+retargeting, and real-time PyBullet simulation pipeline. MediaPipe's
+detection accuracy has already been characterized in Google's own
+published benchmarks, and computing precision/recall/F1 in-house would
+require an arbitrary distance threshold to convert continuous 2D landmark
+coordinates into binary true/false-positive classifications, which is not
+a natural fit for this type of output. Evaluation effort for the
+remainder of this project is therefore prioritized on the metrics that
+directly assess the system's own contribution  3D reconstruction
+accuracy, real-time performance (FPS, latency), dataset completeness, and
+occlusion robustness with
+landmark-level precision/recall/F1 retained only as a secondary,
+lower-priority metric if time permits.
+
+\subsection{Three-Dimensional Reconstruction Accuracy}
+
+The accuracy of the reconstructed 3D joint coordinates will be evaluated by comparing reconstructed positions with known reference measurements or predefined calibration poses.
+
+The Mean Reconstruction Error will be calculated as:
+
+\begin{equation}
+E_{mean} = \frac{1}{N}\sum_{i=1}^{N}\left\|X_i-\hat{X}_i\right\|
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $X_i$ represents the reference joint position,
+    \item $\hat{X}_i$ represents the reconstructed joint position,
+    \item $N$ represents the total number of evaluated joints.
+\end{itemize}
+
+Lower reconstruction error indicates better triangulation accuracy and more reliable 3D motion capture.
+
+\subsection{Real-Time Processing Performance}
+
+The computational efficiency of the proposed system will be evaluated using the following metrics:
+
+\begin{itemize}
+    \item Frames Per Second (FPS)
+    \item Average processing time per frame
+    \item CPU utilization
+\end{itemize}
+
+Frames Per Second (FPS) will be computed as:
+
+\begin{equation}
+FPS = \frac{\text{Total Processed Frames}}{\text{Total Execution Time}}
+\end{equation}
+
+The system is expected to maintain near real-time operation while processing multiple camera streams simultaneously.
+
+\subsection{Simulation Replication Latency}
+
+The responsiveness of the robotic arm simulation will be measured by calculating the delay between human motion capture and corresponding robotic arm movement within PyBullet.
+
+Latency will be calculated as:
+
+\begin{equation}
+Latency = T_{simulation} - T_{capture}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $T_{capture}$ is the timestamp of landmark acquisition,
+    \item $T_{simulation}$ is the timestamp of simulation update.
+\end{itemize}
+
+Lower latency values indicate better real-time motion replication performance.
+
+\subsection{Dataset Completeness}
+
+The quality and reliability of the generated dataset will be evaluated by measuring the percentage of frames containing valid joint information.
+
+Dataset Completeness will be calculated as:
+
+\begin{equation}
+Completeness = \frac{\text{Valid Frames}}{\text{Total Frames}} \times 100
+\end{equation}
+
+A higher completeness percentage indicates successful landmark tracking and dataset generation throughout the recording session.
+
+\subsection{Occlusion Robustness}
+
+To evaluate the robustness of the proposed multi-camera framework, controlled occlusion experiments will be performed by partially blocking one or more camera views.
+
+The following factors will be analyzed:
+
+\begin{itemize}
+    \item Landmark detection continuity
+    \item Reconstruction accuracy under occlusion
+    \item Percentage of successfully reconstructed joints
+    \item Simulation stability during occluded conditions
+\end{itemize}
+
+The multi-camera configuration is expected to reduce tracking failures and improve reconstruction reliability compared to monocular camera systems.
+
+\subsection{Overall System Evaluation}
+
+The overall effectiveness of MotionBridge will be assessed by combining the above metrics to determine whether the system can provide accurate, real-time human arm motion capture and robotic dataset generation using only low-cost RGB cameras and standard computing hardware.
+
+Successful completion of the project will be demonstrated through:
+
+\begin{itemize}
+    \item Reliable landmark detection,
+    \item Accurate 3D joint reconstruction,
+    \item Real-time robotic arm simulation,
+    \item Low-latency operation,
+    \item High dataset completeness,
+    \item Robust performance under moderate occlusion conditions.
+\end{itemize}
+
+The results obtained from these evaluations will be used to assess the suitability of the proposed framework for future robotic imitation learning and human--robot interaction applications.

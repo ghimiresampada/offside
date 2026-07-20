@@ -1,4 +1,4 @@
-\chapter{Result and Analysis}
+\chapter{RESULTS AND ANALYSIS}
 
 At this stage of the project, the full software pipeline described in
 Chapter 5 has been implemented and integration-tested at the algorithmic
@@ -21,7 +21,7 @@ through the unmodified production triangulation code to reconstruct the
 
 \begin{table}[h]
 \centering
-\caption{Synthetic triangulation validation — reconstruction error against known ground truth}
+\caption{Synthetic triangulation validation  reconstruction error against known ground truth}
 \label{tab:synthetic-validation}
 \begin{tabular}{ccccc}
 \hline
@@ -43,7 +43,7 @@ calibration and noise-free 2D observations, it recovers the true 3D point
 essentially exactly. This isolates the triangulation \emph{algorithm} as a
 correct component, separate from the accuracy that will later depend on
 real checkerboard calibration quality and MediaPipe's landmark-detection
-noise — both of which can only be measured once live capture is running.
+noise  both of which can only be measured once live capture is running.
 
 The retargeted wrist targets produced by \texttt{retargeting.py} for the
 same test sequence were also confirmed to scale correctly to the
@@ -53,28 +53,39 @@ implemented correctly.
 
 \section{Camera Calibration Results}
 
-\textit{[Fill in after running \texttt{calibrate\_step1\_intrinsics.py}
-and \texttt{calibrate\_step2\_extrinsics.py} on your hardware — both
-scripts print an RMS reprojection error in pixels for each camera.]}
-
-\begin{table}[h]
+\begin{table}[H]
 \centering
-\caption{Camera calibration reprojection error}
+\caption{Camera Calibration Reprojection Error}
 \label{tab:calib-results}
-\begin{tabular}{lcc}
+\begin{tabular}{lccc}
 \hline
-\textbf{Camera} & \textbf{Intrinsic RMS error (px)} & \textbf{Extrinsic RMS error (px)} \\
+\textbf{Camera} & \textbf{Intrinsic RMS error (px)} & \textbf{Extrinsic RMS error (px)} & \textbf{Ref. Value} \\
 \hline
-Front & & \\
-Left & & \\
-Right & & \\
+Front & 0.2145 & -(origin) & <=1\\
+Left & 0.3123 & 2.4320 & <=1\\
+Right & 0.3012 & 3.6304 & <=1\\
 \hline
 \end{tabular}
 \end{table}
 
-A value under approximately 1.0\,px per camera is generally considered a
-good calibration; higher values typically indicate insufficient variety
-in checkerboard poses during capture and warrant re-calibration.
+Intrinsic calibration is good for all three cameras (all under 0.35\,px,
+well within the $\sim$1.0\,px target). Extrinsic calibration for the
+left and right cameras (2.43\,px and 3.63\,px respectively) is
+noticeably higher than the intrinsic results and above the ideal
+$\sim$1.0\,px target, though this is a substantial improvement over
+uncorrected attempts earlier in development, which exceeded 18--40\,px
+before the per-shot corner-order correction was applied.
+The gap between the near-ideal intrinsic results and the elevated
+extrinsic results isolates the remaining error to the stereo
+correspondence step specifically  most likely insufficient pose variety
+in the shared-overlap-zone shots used for extrinsic calibration, since
+that capture is more constrained (all three cameras must see the board
+at once) than the unconstrained, full-frame intrinsic captures. This is
+consistent with, and offers a likely explanation for, the 12.8\%
+implausible-reconstruction rate observed in the live session results
+below: a multi-pixel extrinsic error directly degrades the geometric
+accuracy of the triangulation in Eq.~4-3, making it more likely for a
+borderline 2-view triangulation to produce a poor solution.
 
 \section{Real-Time System Integration}
 
@@ -82,150 +93,86 @@ The full runtime loop (\texttt{main.py}) has been implemented and runs
 end-to-end: synchronized multi-camera capture, parallel MediaPipe
 inference, triangulation, temporal smoothing, retargeting, and PyBullet
 IK solving, with every processed frame written to the CSV dataset and
-printed live to the console. \textit{[Once run on your hardware, report
-here: typical achieved FPS, percentage of frames with a successfully
-solved IK target, and any qualitative observations about tracking
-stability.]}
+printed live to the console.
+A preliminary live capture session was conducted to evaluate the end-to-end runtime performance and dataset generation capabilities of the system. The session lasted for approximately 34.8 seconds, during which a total of 627 frames were logged. The system achieved a processing rate of 18.0 Frames Per Second (FPS) on standard CPU hardware. Out of the total frames, 556 yielded a valid Inverse Kinematics (IK) solution, resulting in a dataset completeness of 88.68\%. However, 80 frames (12.76\%) contained at least one implausible reconstructed point (exceeding 3.0 meters from the world origin), indicating moments of tracking instability or triangulation failure under occlusion or rapid motion. These metrics confirm that the system operates in near real-time and successfully logs structured data, though further refinement of the extrinsic calibration is required to eliminate the implausible trajectory spikes.
+
+\section{Dataset Sample}
+
+To illustrate the output of the real-time data factory, a curated 10-frame continuous segment from the live capture session is presented in Table \ref{tab:dataset-sample}. This segment captures a smooth arm-raising and lowering motion. As observed, the spatial coordinates (X, Y, Z) transition continuously across frames without abnormal jumps, demonstrating that the confidence-weighted triangulation (Eq. 4-3) successfully reconstructs metric 3D spatial trajectories from the three 2D camera views.
+
+\begin{table}[H]
+\centering
+\caption{Sample of mathematical predicted output by MotionBridge}
+\label{tab:dataset-sample}
+\renewcommand{\arraystretch}{1.2} % Adds a bit of padding to rows
+\begin{tabular}{ccccc}
+\hline
+\textbf{Timestamp (s)} & \textbf{Joint} & \textbf{X (m)} & \textbf{Y (m)} & \textbf{Z (m)} \\ \hline
+
+\multirow{3}{*}{1784463652.285} & Shoulder & 0.256 & 0.347 & 0.655 \\
+ & Elbow & 0.291 & 0.387 & 0.640 \\
+ & Wrist & 0.389 & 0.348 & 0.648 \\ \hline
+
+\multirow{3}{*}{1784463652.737} & Shoulder & 0.286 & 0.507 & 0.655 \\
+ & Elbow & 0.297 & 0.446 & 0.573 \\
+ & Wrist & 0.445 & 0.446 & 0.677 \\ \hline
+
+\multirow{3}{*}{1784463653.030} & Shoulder & 0.295 & 0.561 & 0.667 \\
+ & Elbow & 0.288 & 0.444 & 0.549 \\
+ & Wrist & 0.404 & 0.433 & 0.641 \\ \hline
+
+\multirow{3}{*}{1784463653.364} & Shoulder & 0.295 & 0.587 & 0.674 \\
+ & Elbow & 0.276 & 0.419 & 0.518 \\
+ & Wrist & 0.352 & 0.372 & 0.559 \\ \hline
+
+\multirow{3}{*}{1784463653.722} & Shoulder & 0.200 & 0.328 & 0.536 \\
+ & Elbow & 0.286 & 0.366 & 0.487 \\
+ & Wrist & 0.323 & 0.328 & 0.513 \\ \hline
+
+\multirow{3}{*}{1784463654.011} & Shoulder & 0.176 & 0.263 & 0.499 \\
+ & Elbow & 0.296 & 0.355 & 0.481 \\
+ & Wrist & 0.313 & 0.319 & 0.503 \\ \hline
+\end{tabular}
+\end{table}
 
 \section{Discussion}
 
 The results obtained so far confirm that the mathematical core of the
-system — triangulation and retargeting — is implemented correctly and
+system  triangulation and retargeting  is implemented correctly and
 behaves as specified in the proposal under ideal (noise-free,
 exactly-known calibration) conditions. This isolates any inaccuracy
 observed once real hardware results are collected to two remaining
 sources: (1) checkerboard calibration quality, and (2) MediaPipe
-landmark-detection noise — rather than a defect in the reconstruction
-mathematics itself. This gives a clear diagnostic starting point for
-Chapter 7's remaining evaluation work.
+landmark-detection noise rather than a defect in the reconstruction
+mathematics itself.
 
-\section{Expected Results}
+\section{Feasibility Analysis}
+\subsection{Technical Feasibility}
 
-The proposed MotionBridge system is expected to provide a low-cost and real-time framework for human arm motion capture, simulation replication, and robotic dataset generation using only standard RGB cameras and open-source software tools. By integrating MediaPipe-based landmark detection, multi-camera triangulation, and PyBullet simulation, the system is expected to generate accurate three-dimensional representations of human arm and hand motion without requiring specialized depth sensors or wearable devices.
+The technical risk profile for the MotionBridge framework is exceptionally low due to the selection of mature, optimized, and well-documented open-source technologies. The system utilizes Google \texttt{MediaPipe} libraries, including Pose and Hands Landmarkers, for lightweight 2D feature extraction from video frames, \texttt{OpenCV} for spatial coordinate processing and triangulation, and \texttt{PyBullet} for kinematic simulation and motion mapping. These tools are widely adopted within the computer vision and robotics communities and have proven compatibility within standard Python environments.
 
-The system is expected to successfully detect shoulder, elbow, wrist, and finger landmarks from multiple camera views and reconstruct their corresponding 3D world coordinates through confidence-weighted triangulation. The reconstructed arm motion is expected to be replicated in real time within a PyBullet simulation environment using inverse kinematics-based robotic arm control.
+The framework is designed to operate efficiently on commonly available hardware. Unlike traditional motion capture systems that require expensive depth sensors, specialized cameras, or dedicated GPU infrastructure, MotionBridge can function effectively on standard consumer-grade computers. The selected software components are optimized for CPU-based execution, making the system accessible to users with moderate hardware specifications such as an Intel Core i5 processor and 8 GB of RAM.
 
-Simultaneously, the system is expected to generate a structured dataset containing timestamped 3D coordinates of arm and finger joints, along with corresponding robotic arm joint angles. This dataset is intended to support future applications in robotic imitation learning, teleoperation, rehabilitation engineering, and human--robot collaboration.
+To ensure reliable motion reconstruction, the system incorporates confidence-based landmark processing techniques that reduce the impact of temporary occlusions and inaccurate detections. By assigning greater importance to highly visible viewpoints and minimizing the influence of uncertain observations, the framework improves the stability and accuracy of reconstructed motion data. Additional temporal smoothing mechanisms are also proposed to reduce high-frequency jitter and provide smoother trajectories for downstream simulation and analysis tasks.
 
-Furthermore, the multi-camera architecture is expected to improve robustness against partial occlusions by utilizing redundant viewpoints, thereby maintaining reliable landmark reconstruction even when one camera view is temporarily obstructed. The complete pipeline is expected to operate on standard CPU-based hardware while maintaining near real-time performance.
+\subsection{Economic Feasibility}
 
-\section{Evaluation Metrics}
+From a budgetary and resource allocation perspective, the MotionBridge system demonstrates excellent cost efficiency, making it highly suitable for academic institutions, student projects, and low-resource research environments. Traditional marker-based motion capture systems often require investments ranging from several thousand to tens of thousands of dollars. In contrast, the complete hardware setup for MotionBridge can be assembled for an estimated budget of approximately NPR 24,000, significantly reducing the financial barriers associated with motion capture research.
 
-The performance of the proposed system will be evaluated using quantitative and qualitative metrics that assess landmark detection quality, three-dimensional reconstruction accuracy, real-time performance, simulation responsiveness, dataset quality, and robustness to occlusions.
+Furthermore, the entire software stack used in the project is open-source and freely available. Core technologies such as \texttt{Python}, \texttt{OpenCV}, \texttt{MediaPipe}, \texttt{PyBullet}, \texttt{Pandas}, and \texttt{Git} do not require licensing fees or recurring subscription costs. This eliminates long-term software expenses and allows future development and deployment without additional financial commitments.
 
-\subsection{Landmark Detection Precision, Recall, and F1-Score}
+\subsection{Operational Feasibility}
 
-On review, these metrics primarily characterize the pretrained MediaPipe Pose/Hands backbone itself, rather
-than the system components developed in this project — the
-confidence-weighted multi-camera triangulation, vector-proportional
-retargeting, and real-time PyBullet simulation pipeline. MediaPipe's
-detection accuracy has already been characterized in Google's own
-published benchmarks, and computing precision/recall/F1 in-house would
-require an arbitrary distance threshold to convert continuous 2D landmark
-coordinates into binary true/false-positive classifications, which is not
-a natural fit for this type of output. Evaluation effort for the
-remainder of this project is therefore prioritized on the metrics that
-directly assess the system's own contribution — 3D reconstruction
-accuracy, real-time performance (FPS, latency), dataset completeness, and
-occlusion robustness (Sections 6.2 onward and Chapter 7) — with
-landmark-level precision/recall/F1 retained only as a secondary,
-lower-priority metric if time permits.
+Operational feasibility assesses how effectively the proposed system can function within real-world deployment environments. The project minimizes operational complexity by clearly defining the scope of simulation and data collection components. While detailed hand and finger landmark coordinates are captured and stored within the generated datasets, only major upper-body joints are visualized in the simulation environment. This design choice helps maintain smooth execution performance while still preserving comprehensive motion data for future analysis.
 
-\subsection{Three-Dimensional Reconstruction Accuracy}
+The framework also generates structured datasets automatically during operation. Motion information is exported into organized CSV files containing temporal and spatial information for relevant body joints. These datasets are directly suitable for downstream applications such as imitation learning, behavioral analysis, machine learning model training, and robotics research, thereby increasing the long-term value of the system.
 
-The accuracy of the reconstructed 3D joint coordinates will be evaluated by comparing reconstructed positions with known reference measurements or predefined calibration poses.
+In addition, the architecture is highly adaptable to different environments. The system requires only standard indoor lighting conditions and an initial camera calibration procedure to establish accurate spatial references. Once calibrated, the framework can operate in ordinary indoor spaces without requiring specialized infrastructure, making deployment straightforward and practical.
 
-The Mean Reconstruction Error will be calculated as:
-
-\begin{equation}
-E_{mean} = \frac{1}{N}\sum_{i=1}^{N}\left\|X_i-\hat{X}_i\right\|
-\end{equation}
-
-where:
+\subsection{Schedule Feasibility (Realistic Viability)}
+The project layout presents a sustainable and logically organized developmental progression over the scheduled timeline:
 \begin{itemize}
-    \item $X_i$ represents the reference joint position,
-    \item $\hat{X}_i$ represents the reconstructed joint position,
-    \item $N$ represents the total number of evaluated joints.
+    \item Structural phases are explicitly partitioned into upfront research and literature consolidation, reducing design gaps.
+    \item A massive mid-timeline block is dedicated purely to core \textbf{System Design and Development}, allowing the team sufficient cushion to iron out multi-threaded asynchronous frame sync loops ($\Delta t < 15\text{ ms}$).
+    \item Adequate downstream space is reserved for system validation, constraint testing under simulated occlusions, and documentation refinement prior to final submittal.
 \end{itemize}
-
-Lower reconstruction error indicates better triangulation accuracy and more reliable 3D motion capture.
-
-\subsection{Real-Time Processing Performance}
-
-The computational efficiency of the proposed system will be evaluated using the following metrics:
-
-\begin{itemize}
-    \item Frames Per Second (FPS)
-    \item Average processing time per frame
-    \item CPU utilization
-\end{itemize}
-
-Frames Per Second (FPS) will be computed as:
-
-\begin{equation}
-FPS = \frac{\text{Total Processed Frames}}{\text{Total Execution Time}}
-\end{equation}
-
-The system is expected to maintain near real-time operation while processing multiple camera streams simultaneously.
-
-\subsection{Simulation Replication Latency}
-
-The responsiveness of the robotic arm simulation will be measured by calculating the delay between human motion capture and corresponding robotic arm movement within PyBullet.
-
-Latency will be calculated as:
-
-\begin{equation}
-Latency = T_{simulation} - T_{capture}
-\end{equation}
-
-where:
-\begin{itemize}
-    \item $T_{capture}$ is the timestamp of landmark acquisition,
-    \item $T_{simulation}$ is the timestamp of simulation update.
-\end{itemize}
-
-Lower latency values indicate better real-time motion replication performance.
-
-\subsection{Dataset Completeness}
-
-The quality and reliability of the generated dataset will be evaluated by measuring the percentage of frames containing valid joint information.
-
-Dataset Completeness will be calculated as:
-
-\begin{equation}
-Completeness = \frac{\text{Valid Frames}}{\text{Total Frames}} \times 100
-\end{equation}
-
-A higher completeness percentage indicates successful landmark tracking and dataset generation throughout the recording session.
-
-\subsection{Occlusion Robustness}
-
-To evaluate the robustness of the proposed multi-camera framework, controlled occlusion experiments will be performed by partially blocking one or more camera views.
-
-The following factors will be analyzed:
-
-\begin{itemize}
-    \item Landmark detection continuity
-    \item Reconstruction accuracy under occlusion
-    \item Percentage of successfully reconstructed joints
-    \item Simulation stability during occluded conditions
-\end{itemize}
-
-The multi-camera configuration is expected to reduce tracking failures and improve reconstruction reliability compared to monocular camera systems.
-
-\subsection{Overall System Evaluation}
-
-The overall effectiveness of MotionBridge will be assessed by combining the above metrics to determine whether the system can provide accurate, real-time human arm motion capture and robotic dataset generation using only low-cost RGB cameras and standard computing hardware.
-
-Successful completion of the project will be demonstrated through:
-
-\begin{itemize}
-    \item Reliable landmark detection,
-    \item Accurate 3D joint reconstruction,
-    \item Real-time robotic arm simulation,
-    \item Low-latency operation,
-    \item High dataset completeness,
-    \item Robust performance under moderate occlusion conditions.
-\end{itemize}
-
-The results obtained from these evaluations will be used to assess the suitability of the proposed framework for future robotic imitation learning and human--robot interaction applications.

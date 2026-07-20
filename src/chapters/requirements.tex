@@ -6,9 +6,9 @@
 \begin{itemize}[leftmargin=1.5em]
     \item \textbf{USB Webcams $\times$ 3:} Standard 1080p USB webcams (e.g., Logitech C270 or equivalent), positioned at front, left, and right angles around the capture area. Minimum 30~fps required for real-time operation.
     \item \textbf{Camera Mounts / Tripods $\times$ 3:} Fixed mounting hardware to ensure stable, calibrated camera positions during capture sessions.
-    \item \textbf{Checkerboard Calibration Target:} Printed A4 checkerboard pattern (9$\times$6 inner corners) for OpenCV camera calibration.
+    \item \textbf{Checkerboard Calibration Target:} Printed A4 checkerboard pattern (7$\times$9 inner corners, 25mm sqaure size) for OpenCV camera calibration.
     \item \textbf{Laptop / Desktop PC:} Minimum Intel Core i5 (8th generation or above), 8~GB RAM. No GPU required MediaPipe and PyBullet both run on CPU for this pipeline.
-    \item \textbf{USB Hub (optional):} If the host machine has insufficient USB ports for three simultaneous camera connections.
+    \item \textbf{USB Hub (optional):}The host machine as the USB hub for three simultaneous camera connections.
 \end{itemize}
 
 \section{Software Requirements}
@@ -26,74 +26,3 @@
 
 \section{Procurement Status}
 All hardware components listed in Section 3.1 have been procured and are operational, including all three USB webcams, tripod mounts, and the printed checkerboard calibration target. The software environment listed in Section 3.2 has been fully configured, with MediaPipe, OpenCV, and PyBullet installed and verified functional on the development machine ([OS], [CPU], [RAM]). The Kuka IIWA URDF model has been loaded and validated within the PyBullet environment.
-
-\section{Feasibility}
-
-\subsection{Technical Feasibility (High Viability)}
-The technical risk profile for the MotionBridge framework is exceptionally low due to the structural selection of mature, optimized, and heavily documented open-source ecosystems.
-
-\begin{itemize}
-    \item \textbf{Software Ecosystem Synergy:} The pipeline leverages standard Google \texttt{MediaPipe} libraries (Pose and Hands Landmarkers) for lightweight 2D frame feature extraction, \texttt{OpenCV} for spatial coordinate triangulation math, and \texttt{PyBullet} for forward/inverse kinematic simulation mapping. These packages possess proven, stable interoperability in standard Python 3.9+ execution environments.
-    \item \textbf{Hardware Democratic Accessibility:} Traditional optical or inertial motion capture topologies rely on high-overhead dedicated GPU architecture or high-cost active depth configurations. MotionBridge bypasses these barriers entirely; both \texttt{MediaPipe} and \texttt{PyBullet} are natively optimized for concurrent Central Processing Unit (CPU) thread loops. Standard Intel Core i5 (8th Generation) host machines with 8 GB RAM satisfy performance thresholds.
-    \item \textbf{Algorithmic Resilience to Noise:} The system natively counteracts regional body self-occlusion through a custom confidence-weighted triangulation algorithm:
-    \begin{equation}
-        X_{\text{3D}} = \frac{\sum_{i=1}^{3} c_i \cdot f(P_i, x_i)}{\sum_{i=1}^{3} c_i}
-    \end{equation}
-    By dynamically discounting occluded viewpoints where the landmark visibility score ($c_i \to 0$), geometric baseline errors are mitigated. The proposal to introduce analytical temporal smoothing (\textit{One Euro Filter}) dynamically scaled via:
-    \begin{equation}
-        \alpha = \frac{1}{1 + \tau \Delta t}, \quad \tau = \frac{1}{2\pi \cdot (f_{\text{min}} + \beta \cdot |\dot{X}_{\text{3D}}|)}
-    \end{equation}
-    further isolates high-frequency simulation jitter from propagating into the downstream trajectory tables.
-\end{itemize}
-
-\subsection{Economic Feasibility (Excellent Viability)}
-From a budgetary and resource-allocation perspective, the MotionBridge system exhibits exceptional cost efficiency, rendering it highly feasible for deployment within low-income research environments and academic laboratories.
-
-\begin{itemize}
-    \item \textbf{Capital Asset Minimization:} Traditional industry standard spatial marker systems cost thousands of dollars. The entire physical equipment specification for MotionBridge scales under an estimated total budget of \textbf{NPR 24,000} (approximately \$180 USD), as detailed below:
-\end{itemize}
-
-\begin{table}[h!]
-\centering
-\caption{Estimated Hardware and Project Budget Breakdown}
-\begin{tabular}{llrr}
-\toprule
-\textbf{S.N.} & \textbf{Item Description} & \textbf{Qty} & \textbf{Total Price (NPR)} \\
-\midrule
-1 & Standard 1080p USB Webcams & 3 & 12,000 \\
-2 & Fixed Camera Tripods & 3 & 4,500 \\
-3 & Powered USB Extension Hub & 1 & 2,000 \\
-4 & Geometric Checkerboard Calibration Target & 1 & 1,000 \\
-5 & Open-Source Core Software Modules & - & Free \\
-6 & Technical Project Documentation \& Testing & - & 2,500 \\
-7 & Operational Contingency Reserve Fund & - & 2,000 \\
-\midrule
-\textbf{} & \textbf{Total Estimated Budget} & & \textbf{NPR 24,000} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{itemize}
-    \item \textbf{Zero Software Overhead:} The complete computational development stack (\texttt{Python}, \texttt{OpenCV}, \texttt{MediaPipe}, \texttt{PyBullet}, \texttt{Pandas}, \texttt{Git}) contains zero proprietary licensing or execution recurring fees.
-\end{itemize}
-
-\subsection{Operational Feasibility (High Viability)}
-Operational feasibility evaluates how effectively the system integrates into actual deployment settings to produce the desired outcomes.
-
-\begin{itemize}
-    \item \textbf{Strategic Scope Bounding:} The team has managed operational risk by structurally separating data collection from simulation constraints. While intricate 21-point hand finger joint coordinates are logged to the output files, they are explicitly omitted from the \texttt{PyBullet} simulation visualization due to standard Kuka IIWA URDF link structural limitations. This boundary preserves execution frame rates.
-    \item \textbf{High-Value Extensible Artifact Production:} The pipeline runs an automated data factory serialization loop that seamlessly exports structured CSV parameters:
-    \begin{equation}
-        \text{Record} = \{t, X_{\text{shoulder}}, X_{\text{elbow}}, X_{\text{wrist}}, X_{\text{fingers}}, \theta\}
-    \end{equation}
-    This highly clean, structured timeline format is directly compatible with downstream imitation learning pipelines, behavioral cloning neural models, or inverse reinforcement learning protocols.
-    \item \textbf{Environmental Adaptability:} The architecture operates in any standard ambient space. It requires only an initial checkerboard coordinate matrix execution pass ($9 \times 6$ corners) and consistent indoor lighting to verify structural integrity.
-\end{itemize}
-
-\subsection{Schedule Feasibility (Realistic Viability)}
-The project layout presents a sustainable and logically organized developmental progression over the scheduled timeline:
-\begin{itemize}
-    \item Structural phases are explicitly partitioned into upfront research and literature consolidation, reducing design gaps.
-    \item A massive mid-timeline block is dedicated purely to core \textbf{System Design and Development}, allowing the team sufficient cushion to iron out multi-threaded asynchronous frame sync loops ($\Delta t < 15\text{ ms}$).
-    \item Adequate downstream space is reserved for system validation, constraint testing under simulated occlusions, and documentation refinement prior to final submittal.
-\end{itemize}
